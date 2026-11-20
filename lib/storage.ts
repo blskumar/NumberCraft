@@ -32,6 +32,7 @@ export const DEFAULT_PROFILE: StudentProfile = {
   displayName: 'Guest Explorer',
   ageTier: 'challengers',
   soundEnabled: true,
+  themePreference: 'system',
   sessionKind: 'guest',
   authProvider: 'guest',
   email: null,
@@ -60,6 +61,12 @@ export function loadProfile(): StudentProfile {
         : parsed.authProvider === 'email'
           ? 'email'
           : 'google';
+    const themePreference =
+      parsed.themePreference === 'light' ||
+      parsed.themePreference === 'dark' ||
+      parsed.themePreference === 'system'
+        ? parsed.themePreference
+        : DEFAULT_PROFILE.themePreference;
     return {
       displayName:
         typeof parsed.displayName === 'string' && parsed.displayName.trim()
@@ -75,6 +82,7 @@ export function loadProfile(): StudentProfile {
         typeof parsed.soundEnabled === 'boolean'
           ? parsed.soundEnabled
           : DEFAULT_PROFILE.soundEnabled,
+      themePreference,
       sessionKind,
       authProvider,
       email:

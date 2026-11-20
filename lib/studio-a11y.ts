@@ -59,6 +59,22 @@ export function getStudioTabA11yMeta(
           'Switched to Factor Grid strategy game arena.',
         isGameArena: true,
       };
+    case 'play-equation-foundry':
+      return {
+        containerId: 'studio-region-equation-foundry',
+        regionLabel: 'Equation Foundry Expression Game Arena',
+        announcement:
+          'Switched to Equation Foundry expression-building game arena.',
+        isGameArena: true,
+      };
+    case 'play-odds-urns':
+      return {
+        containerId: 'studio-region-odds-urns',
+        regionLabel: 'Odds and Urns Probability Game Arena',
+        announcement:
+          'Switched to Odds and Urns modular probability game arena.',
+        isGameArena: true,
+      };
     case 'rooms':
       return {
         containerId: 'studio-region-rooms',
@@ -74,11 +90,11 @@ export function getStudioTabA11yMeta(
           'Switched to Mastery Notebook. Inspect earned seals and match history.',
         isGameArena: false,
       };
-    case 'blueprint':
+    case 'rules':
       return {
-        containerId: 'studio-region-blueprint',
-        regionLabel: 'Studio Game Design Blueprint',
-        announcement: 'Switched to Studio Game Design Blueprint.',
+        containerId: 'studio-region-rules',
+        regionLabel: 'Game Rules and Variations Guide',
+        announcement: 'Switched to Game Rules and Variations Guide.',
         isGameArena: false,
       };
   }

@@ -7,18 +7,32 @@ import TopNav, { type StudioTab } from '@/components/TopNav';
 import StudioHub from '@/components/StudioHub';
 import FactorGridPrototype from '@/components/FactorGridPrototype';
 import ArithmeticArena from '@/components/ArithmeticArena';
+import EquationFoundryArena from '@/components/EquationFoundryArena';
+import OddsUrnsArena from '@/components/OddsUrnsArena';
 import DailyChallengeArena from '@/components/DailyChallengeArena';
 import OnlineRoomsPreview from '@/components/OnlineRoomsPreview';
 import MasteryNotebook from '@/components/MasteryNotebook';
 import PerformanceDashboard from '@/components/PerformanceDashboard';
-import BlueprintOverview from '@/components/BlueprintOverview';
+import GameRulesGuide from '@/components/GameRulesGuide';
 import AccountModal from '@/components/AccountModal';
 import MasteryProgressBar from '@/components/MasteryProgressBar';
+import SessionElapsedTimer from '@/components/SessionElapsedTimer';
+import ConfettiCelebration from '@/components/ConfettiCelebration';
+import EndOfSessionModal from '@/components/EndOfSessionModal';
 import {
   evaluateAchievements,
   type AchievementDefinition,
 } from '@/lib/achievements';
-import { buildDailyMatchRecord } from '@/lib/daily-challenge';
+import {
+  buildDailyMatchRecord,
+  getLocalDateKey,
+} from '@/lib/daily-challenge';
+import {
+  DAILY_MILESTONE_MULTIPLIER,
+  evaluateDailyMilestone,
+  getDailyMilestoneForDate,
+  isMatchForDailyMilestoneArena,
+} from '@/lib/daily-milestone';
 import {
   appendMatch,
   clearAllLocalProgress,
@@ -41,8 +55,18 @@ import {
   createSampleDashboardData,
   isSampleDailyCompletion,
 } from '@/lib/performance-dashboard';
-import { playSoundPreviewChime } from '@/lib/sound';
+import {
+  buildEndOfSessionSummary,
+  isActiveGameTab,
+  type ArenaSessionStats,
+} from '@/lib/session-tracker';
+import { playAchievementChime, playSoundPreviewChime } from '@/lib/sound';
 import { getStudioTabA11yMeta } from '@/lib/studio-a11y';
+import {
+  applyThemeToDocument,
+  loadThemePreference,
+  saveThemePreference,
+} from '@/lib/theme';
 import type {
   AchievementId,
   AgeTier,
@@ -51,7 +75,21 @@ import type {
   EarnedBadgeRecord,
   MatchRecord,
   StudentProfile,
+  ThemePreference,
 } from '@/lib/types';
+
+const TAB_DEST_LABELS: Record<StudioTab, string> = {
+  studio: 'Games Studio',
+  daily: 'Daily Challenge',
+  dashboard: 'Performance Dashboard',
+  'play-arithmetic': 'Core Arithmetic',
+  'play-factor-grid': 'Factor Grid',
+  'play-equation-foundry': 'Equation Foundry',
+  'play-odds-urns': 'Odds & Urns',
+  rooms: 'Online Rooms',
+  notebook: 'Mastery Notebook',
+  rules: 'Rules & Guide',
+};
 
 export default function NumbercraftApp() {
   const searchParams = useSearchParams();
@@ -74,12 +112,32 @@ export default function NumbercraftApp() {
     AchievementId[]
   >([]);
   const [tabAnnouncement, setTabAnnouncement] = useState('');
+  const [themePreference, setThemePreference] =
+    useState<ThemePreference>('system');
+
+  // Confetti celebration burst counter
+  const [confettiTriggerKey, setConfettiTriggerKey] = useState(0);
+
+  // Subtle persistent session timer + End-of-Session reflection modal state
+  const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
+  const [pendingLeaveTab, setPendingLeaveTab] = useState<StudioTab | null>(null);
+  const [pendingSessionSummary, setPendingSessionSummary] =
+    useState<ArenaSessionStats | null>(null);
+
+  const sessionAccumulatorRef = useRef({
+    problemsSolved: 0,
+    problemsAttempted: 0,
+    matchesRecorded: 0,
+    newlyEarnedSeals: [] as string[],
+  });
 
   const earnedBadgesRef = useRef<EarnedBadgeRecord[]>(earnedBadges);
   const profileRef = useRef<StudentProfile>(profile);
   const matchesRef = useRef<MatchRecord[]>(matches);
   const dailyRef = useRef<DailyChallengeCompletion[]>(dailyCompletions);
   const hasMountedTabRef = useRef(false);
+
+  const inActiveGameArena = isActiveGameTab(activeTab);
 
   const activeTabA11y = useMemo(
     () => getStudioTabA11yMeta(activeTab, activeArithmeticGame),
@@ -98,6 +156,15 @@ export default function NumbercraftApp() {
     return () => window.clearTimeout(timer);
   }, [activeTabA11y.announcement]);
 
+  // Persistent elapsed session clock while inside an active game arena
+  useEffect(() => {
+    if (!inActiveGameArena || pendingLeaveTab !== null) return;
+    const id = window.setInterval(() => {
+      setSessionElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [inActiveGameArena, pendingLeaveTab]);
+
   // Hydrate guest profile, match ledger, daily history, and latched Mastery Seals once on mount
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -105,6 +172,10 @@ export default function NumbercraftApp() {
       const loadedMatches = loadMatches();
       const loadedBadges = loadEarnedBadges();
       const loadedDaily = loadDailyCompletions();
+      const loadedTheme =
+        loadedProfile.themePreference ?? loadThemePreference();
+      applyThemeToDocument(loadedTheme);
+      setThemePreference(loadedTheme);
 
       const reconciled = evaluateAchievements(
         loadedMatches,
@@ -141,6 +212,69 @@ export default function NumbercraftApp() {
     [matches, earnedBadges, dailyCompletions]
   );
 
+  const resetArenaSession = useCallback(() => {
+    setSessionElapsedSeconds(0);
+    sessionAccumulatorRef.current = {
+      problemsSolved: 0,
+      problemsAttempted: 0,
+      matchesRecorded: 0,
+      newlyEarnedSeals: [],
+    };
+  }, []);
+
+  /**
+   * Navigates between studio tabs. When leaving an active game arena, opens the
+   * End-of-Session reflection modal summarizing solved problems, accuracy, and
+   * progress toward the next Mastery Seal.
+   */
+  const requestNavigateTab = useCallback(
+    (nextTab: StudioTab) => {
+      if (nextTab === activeTab) return;
+
+      if (isActiveGameTab(activeTab)) {
+        const acc = sessionAccumulatorRef.current;
+        const summary = buildEndOfSessionSummary({
+          arenaTab: activeTab,
+          arenaLabel: TAB_DEST_LABELS[activeTab],
+          elapsedSeconds: sessionElapsedSeconds,
+          problemsSolved: acc.problemsSolved,
+          problemsAttempted: acc.problemsAttempted,
+          matchesRecorded: acc.matchesRecorded,
+          newlyEarnedSeals: acc.newlyEarnedSeals,
+          evaluation: achievementEvaluation,
+        });
+        setPendingSessionSummary(summary);
+        setPendingLeaveTab(nextTab);
+        return;
+      }
+
+      if (isActiveGameTab(nextTab)) {
+        resetArenaSession();
+      }
+      setActiveTab(nextTab);
+    },
+    [
+      achievementEvaluation,
+      activeTab,
+      resetArenaSession,
+      sessionElapsedSeconds,
+    ]
+  );
+
+  const handleConfirmLeaveArena = useCallback(() => {
+    if (!pendingLeaveTab) return;
+    const dest = pendingLeaveTab;
+    setPendingLeaveTab(null);
+    setPendingSessionSummary(null);
+    resetArenaSession();
+    setActiveTab(dest);
+  }, [pendingLeaveTab, resetArenaSession]);
+
+  const handleStayInArena = useCallback(() => {
+    setPendingLeaveTab(null);
+    setPendingSessionSummary(null);
+  }, []);
+
   const handleUpdateProfile = useCallback((next: StudentProfile) => {
     profileRef.current = next;
     setProfile(next);
@@ -175,6 +309,30 @@ export default function NumbercraftApp() {
     });
   }, []);
 
+  const handleChangeTheme = useCallback((nextTheme: ThemePreference) => {
+    setThemePreference(nextTheme);
+    saveThemePreference(nextTheme);
+    applyThemeToDocument(nextTheme);
+    setProfile((prev) => {
+      const next: StudentProfile = { ...prev, themePreference: nextTheme };
+      profileRef.current = next;
+      saveProfile(next);
+      return next;
+    });
+  }, []);
+
+  // Follow OS prefers-color-scheme live when user selected System mode
+  useEffect(() => {
+    applyThemeToDocument(themePreference);
+    if (themePreference !== 'system' || typeof window === 'undefined' || !window.matchMedia) {
+      return;
+    }
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => applyThemeToDocument('system');
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [themePreference]);
+
   const handleToggleSound = useCallback(() => {
     setProfile((prev) => {
       const next = { ...prev, soundEnabled: !prev.soundEnabled };
@@ -187,16 +345,57 @@ export default function NumbercraftApp() {
     });
   }, []);
 
-  const handleLaunchArithmetic = useCallback((gameId: ArithmeticGameId) => {
-    setActiveArithmeticGame(gameId);
-    setActiveTab('play-arithmetic');
-  }, []);
+  const handleLaunchArithmetic = useCallback(
+    (gameId: ArithmeticGameId) => {
+      setActiveArithmeticGame(gameId);
+      resetArenaSession();
+      setActiveTab('play-arithmetic');
+    },
+    [resetArenaSession]
+  );
 
   const handleRecordMatch = useCallback(
     (record: MatchRecord): AchievementDefinition[] => {
-      const updatedMatches = appendMatch(record);
+      const todayKey = getLocalDateKey();
+      const todayMilestone = getDailyMilestoneForDate(todayKey);
+      const wasCompletedBefore = evaluateDailyMilestone(
+        matchesRef.current,
+        todayKey
+      ).completedToday;
+
+      const qualifiesForDailyMilestone = isMatchForDailyMilestoneArena(
+        record,
+        todayMilestone.arenaId
+      );
+      const enrichedRecord: MatchRecord = qualifiesForDailyMilestone
+        ? {
+            ...record,
+            dailyMilestoneMultiplier: DAILY_MILESTONE_MULTIPLIER,
+          }
+        : record;
+
+      const updatedMatches = appendMatch(enrichedRecord);
       matchesRef.current = updatedMatches;
       setMatches(updatedMatches);
+
+      if (qualifiesForDailyMilestone && !wasCompletedBefore) {
+        setConfettiTriggerKey((k) => k + 1);
+        playAchievementChime(profileRef.current.soundEnabled);
+      }
+
+      // Accumulate session metrics for End-of-Session reflection modal
+      const acc = sessionAccumulatorRef.current;
+      acc.matchesRecorded += 1;
+      if (record.arithmeticMeta) {
+        acc.problemsSolved += record.arithmeticMeta.solved;
+        acc.problemsAttempted += record.arithmeticMeta.attempted;
+      } else if (record.gameTitle === 'Equation Foundry' || record.gameTitle === 'Odds & Urns') {
+        acc.problemsSolved += 5;
+        acc.problemsAttempted += 5;
+      } else {
+        acc.problemsSolved += record.result === 'win' ? 1 : 0;
+        acc.problemsAttempted += 1;
+      }
 
       const evaluation = evaluateAchievements(
         updatedMatches,
@@ -206,12 +405,20 @@ export default function NumbercraftApp() {
 
       if (evaluation.newlyUnlocked.length > 0) {
         const newIds = evaluation.newlyUnlocked.map((b) => b.id);
+        const newTitles = evaluation.newlyUnlocked.map((b) => b.title);
+        acc.newlyEarnedSeals = Array.from(
+          new Set([...acc.newlyEarnedSeals, ...newTitles])
+        );
         earnedBadgesRef.current = evaluation.earnedRecords;
         setEarnedBadges(evaluation.earnedRecords);
         setRecentlyUnlockedBadgeIds((prev) =>
           Array.from(new Set([...prev, ...newIds]))
         );
         saveEarnedBadges(evaluation.earnedRecords);
+
+        // Trigger canvas confetti celebration + gentle achievement chime
+        setConfettiTriggerKey((k) => k + 1);
+        playAchievementChime(profileRef.current.soundEnabled);
 
         if (!profileRef.current.featuredBadgeId) {
           const nextProfile: StudentProfile = {
@@ -240,6 +447,11 @@ export default function NumbercraftApp() {
       matchesRef.current = updatedMatches;
       setMatches(updatedMatches);
 
+      const acc = sessionAccumulatorRef.current;
+      acc.matchesRecorded += 1;
+      acc.problemsSolved += completion.solved ? 3 : 0;
+      acc.problemsAttempted += 3 + completion.mistakes;
+
       const evaluation = evaluateAchievements(
         updatedMatches,
         earnedBadgesRef.current,
@@ -248,6 +460,10 @@ export default function NumbercraftApp() {
 
       if (evaluation.newlyUnlocked.length > 0) {
         const newIds = evaluation.newlyUnlocked.map((b) => b.id);
+        const newTitles = evaluation.newlyUnlocked.map((b) => b.title);
+        acc.newlyEarnedSeals = Array.from(
+          new Set([...acc.newlyEarnedSeals, ...newTitles])
+        );
         earnedBadgesRef.current = evaluation.earnedRecords;
         setEarnedBadges(evaluation.earnedRecords);
         setRecentlyUnlockedBadgeIds((prev) =>
@@ -264,6 +480,12 @@ export default function NumbercraftApp() {
           setProfile(nextProfile);
           saveProfile(nextProfile);
         }
+      }
+
+      // Trigger celebratory canvas confetti + gentle completion chime on Daily solve or new badge
+      if (completion.solved || evaluation.newlyUnlocked.length > 0) {
+        setConfettiTriggerKey((k) => k + 1);
+        playAchievementChime(profileRef.current.soundEnabled);
       }
 
       return evaluation.newlyUnlocked;
@@ -349,19 +571,32 @@ export default function NumbercraftApp() {
         {tabAnnouncement}
       </div>
 
+      {/* Canvas-based celebratory confetti overlay on badge unlock & daily solve */}
+      <ConfettiCelebration triggerKey={confettiTriggerKey} />
+
       <MasteryProgressBar
         earnedCount={achievementEvaluation.earnedCount}
         totalCount={achievementEvaluation.totalCount}
-        onOpenNotebook={() => setActiveTab('notebook')}
+        onOpenNotebook={() => requestNavigateTab('notebook')}
       />
 
       <TopNav
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={requestNavigateTab}
         profile={profile}
         earnedSealCount={achievementEvaluation.earnedCount}
+        themePreference={themePreference}
+        onChangeTheme={handleChangeTheme}
         onOpenAccount={() => setAccountOpen(true)}
       />
+
+      {/* Subtle persistent top-right session timer while inside active game arenas */}
+      {inActiveGameArena && (
+        <SessionElapsedTimer
+          elapsedSeconds={sessionElapsedSeconds}
+          arenaName={TAB_DEST_LABELS[activeTab]}
+        />
+      )}
 
       <div
         id="studio-active-container"
@@ -393,11 +628,15 @@ export default function NumbercraftApp() {
                 ageTier={profile.ageTier}
                 playerName={profile.displayName}
                 onChangeTier={handleChangeTier}
-                onLaunchFactorGrid={() => setActiveTab('play-factor-grid')}
+                onLaunchFactorGrid={() => requestNavigateTab('play-factor-grid')}
                 onLaunchArithmetic={handleLaunchArithmetic}
-                onOpenDaily={() => setActiveTab('daily')}
-                onOpenRooms={() => setActiveTab('rooms')}
-                onOpenBlueprint={() => setActiveTab('blueprint')}
+                onLaunchEquationFoundry={() =>
+                  requestNavigateTab('play-equation-foundry')
+                }
+                onLaunchOddsUrns={() => requestNavigateTab('play-odds-urns')}
+                onOpenDaily={() => requestNavigateTab('daily')}
+                onOpenRooms={() => requestNavigateTab('rooms')}
+                matches={matches}
                 matchesCount={matches.length}
                 dailyCompletions={dailyCompletions}
               />
@@ -421,8 +660,8 @@ export default function NumbercraftApp() {
                   dailyCompletions={dailyCompletions}
                   achievementEvaluation={achievementEvaluation}
                   onCompleteDaily={handleCompleteDaily}
-                  onBackToStudio={() => setActiveTab('studio')}
-                  onOpenNotebook={() => setActiveTab('notebook')}
+                  onBackToStudio={() => requestNavigateTab('studio')}
+                  onOpenNotebook={() => requestNavigateTab('notebook')}
                 />
               </div>
             )}
@@ -433,7 +672,7 @@ export default function NumbercraftApp() {
                 matches={matches}
                 dailyCompletions={dailyCompletions}
                 onLaunchArithmetic={handleLaunchArithmetic}
-                onOpenDaily={() => setActiveTab('daily')}
+                onOpenDaily={() => requestNavigateTab('daily')}
                 onLoadSampleDashboard={handleLoadSampleDashboard}
                 onClearSampleDashboard={handleClearSampleMatches}
               />
@@ -456,8 +695,8 @@ export default function NumbercraftApp() {
                   playerName={profile.displayName}
                   soundEnabled={profile.soundEnabled}
                   onToggleSound={handleToggleSound}
-                  onBackToStudio={() => setActiveTab('studio')}
-                  onOpenNotebook={() => setActiveTab('notebook')}
+                  onBackToStudio={() => requestNavigateTab('studio')}
+                  onOpenNotebook={() => requestNavigateTab('notebook')}
                   onRecordMatch={handleRecordMatch}
                   matches={matches}
                 />
@@ -480,21 +719,67 @@ export default function NumbercraftApp() {
                     playerName={profile.displayName}
                     soundEnabled={profile.soundEnabled}
                     onToggleSound={handleToggleSound}
-                    onBackToStudio={() => setActiveTab('studio')}
-                    onOpenRooms={() => setActiveTab('rooms')}
-                    onOpenNotebook={() => setActiveTab('notebook')}
+                    onBackToStudio={() => requestNavigateTab('studio')}
+                    onOpenRooms={() => requestNavigateTab('rooms')}
+                    onOpenNotebook={() => requestNavigateTab('notebook')}
                     onRecordMatch={handleRecordMatch}
                     autoStart={autoStartParam}
                   />
                 </div>
               )}
 
+            {activeTab === 'play-equation-foundry' && (
+              <div
+                data-testid="game-container-equation-foundry"
+                role="region"
+                aria-label="Equation Foundry Expression Interactive Game"
+              >
+                <span className="sr-only" aria-live="polite">
+                  Equation Foundry Expression Game Arena active.
+                </span>
+                <EquationFoundryArena
+                  ageTier={profile.ageTier}
+                  onChangeTier={handleChangeTier}
+                  playerName={profile.displayName}
+                  soundEnabled={profile.soundEnabled}
+                  onToggleSound={handleToggleSound}
+                  onBackToStudio={() => requestNavigateTab('studio')}
+                  onOpenNotebook={() => requestNavigateTab('notebook')}
+                  onRecordMatch={handleRecordMatch}
+                />
+              </div>
+            )}
+
+            {activeTab === 'play-odds-urns' && (
+              <div
+                data-testid="game-container-odds-urns"
+                role="region"
+                aria-label="Odds and Urns Modular Probability Interactive Game"
+              >
+                <span className="sr-only" aria-live="polite">
+                  Odds and Urns Probability Game Arena active.
+                </span>
+                <OddsUrnsArena
+                  ageTier={profile.ageTier}
+                  onChangeTier={handleChangeTier}
+                  playerName={profile.displayName}
+                  soundEnabled={profile.soundEnabled}
+                  onToggleSound={handleToggleSound}
+                  onBackToStudio={() => requestNavigateTab('studio')}
+                  onOpenNotebook={() => requestNavigateTab('notebook')}
+                  onRecordMatch={handleRecordMatch}
+                />
+              </div>
+            )}
+
             {activeTab === 'rooms' && (
               <OnlineRoomsPreview
                 ageTier={profile.ageTier}
                 profile={profile}
                 onOpenAccount={() => setAccountOpen(true)}
-                onLaunchLocalFactorGrid={() => setActiveTab('play-factor-grid')}
+                onLaunchLocalFactorGrid={() =>
+                  requestNavigateTab('play-factor-grid')
+                }
               />
             )}
 
@@ -504,15 +789,21 @@ export default function NumbercraftApp() {
                 matches={matches}
                 achievementEvaluation={achievementEvaluation}
                 onSelectFeaturedBadge={handleSelectFeaturedBadge}
-                onPlayFactorGrid={() => setActiveTab('play-factor-grid')}
+                onPlayFactorGrid={() => requestNavigateTab('play-factor-grid')}
                 onLoadSampleMatches={handleLoadSampleMatches}
                 onClearSampleMatches={handleClearSampleMatches}
               />
             )}
 
-            {activeTab === 'blueprint' && (
-              <BlueprintOverview
-                onLaunchFactorGrid={() => setActiveTab('play-factor-grid')}
+            {activeTab === 'rules' && (
+              <GameRulesGuide
+                onLaunchArithmetic={handleLaunchArithmetic}
+                onLaunchEquationFoundry={() =>
+                  requestNavigateTab('play-equation-foundry')
+                }
+                onLaunchOddsUrns={() => requestNavigateTab('play-odds-urns')}
+                onLaunchFactorGrid={() => requestNavigateTab('play-factor-grid')}
+                onOpenDaily={() => requestNavigateTab('daily')}
               />
             )}
           </motion.div>
@@ -523,10 +814,21 @@ export default function NumbercraftApp() {
         <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-3 px-4 text-xs text-[#5A6572] sm:px-6 lg:px-8">
           <span>Numbercraft · Mathematics &amp; Probability Game Studio</span>
           <span>
-            Daily Challenge · Performance Dashboard · Core Arithmetic · Factor Grid
+            Core Arithmetic · Equation Foundry · Odds &amp; Urns · Factor Grid ·
+            Daily Challenge
           </span>
         </div>
       </footer>
+
+      <EndOfSessionModal
+        open={pendingLeaveTab !== null && pendingSessionSummary !== null}
+        summary={pendingSessionSummary}
+        destinationLabel={
+          pendingLeaveTab ? TAB_DEST_LABELS[pendingLeaveTab] : 'Games Studio'
+        }
+        onConfirmLeave={handleConfirmLeaveArena}
+        onStayInArena={handleStayInArena}
+      />
 
       <AccountModal
         open={accountOpen}
@@ -538,9 +840,11 @@ export default function NumbercraftApp() {
         matchCount={matches.length}
         achievementEvaluation={achievementEvaluation}
         recentlyUnlockedBadgeIds={recentlyUnlockedBadgeIds}
+        themePreference={themePreference}
+        onChangeTheme={handleChangeTheme}
         onUpdateProfile={handleUpdateProfile}
         onClearLocalProgress={handleClearLocalProgress}
-        onOpenNotebook={() => setActiveTab('notebook')}
+        onOpenNotebook={() => requestNavigateTab('notebook')}
       />
     </div>
   );

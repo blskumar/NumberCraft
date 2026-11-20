@@ -4,7 +4,9 @@ import {
   buildArithmeticAccuracySeries,
   buildArithmeticGameBreakdown,
   buildChallengeCompletionHistory,
+  buildDailyChallenge30DayFrequency,
   buildDailyScoreSpeedSeries,
+  buildDailyStreakDurationSeries,
   computeDashboardOverview,
   createSampleDashboardData,
   isSampleDailyCompletion,
@@ -89,4 +91,88 @@ test('computeDashboardOverview calculates accurate averages, positive trend delt
   assert.ok((overview.avgArithmeticAccuracy ?? 0) >= 85);
   assert.ok((overview.accuracyDelta ?? 0) > 0);
   assert.equal(overview.totalChallengesCompleted, 15);
+});
+
+test('buildDailyChallenge30DayFrequency maps 30 chronological days, statuses, longest run, and 6-day rollup blocks', () => {
+  const { sampleDaily } = createSampleDashboardData('2026-11-19');
+  const withTimedOut = [
+    ...sampleDaily,
+    {
+      dateKey: '2026-11-12',
+      editionNumber: 120,
+      tier: 'challengers' as const,
+      archetype: 'mystery-number' as const,
+      archetypeTitle: 'Mystery Number Deduction',
+      solved: false,
+      stepsSolved: 1,
+      secondsUsed: 90,
+      timeLimitSeconds: 90,
+      mistakes: 2,
+      hintsUsed: 1,
+      score: 40,
+      streakDays: 0,
+      completedAt: '2026-11-12T15:00:00.000Z',
+    },
+  ];
+
+  const freq = buildDailyChallenge30DayFrequency(withTimedOut, '2026-11-19');
+
+  assert.equal(freq.points.length, 30);
+  assert.equal(freq.points[0].dateKey, '2026-10-21');
+  assert.equal(freq.points[29].dateKey, '2026-11-19');
+  assert.equal(freq.points[29].isToday, true);
+  assert.equal(freq.points[29].status, 'solved');
+  assert.equal(freq.points[29].barHeight, 1);
+
+  const timedOutDay = freq.points.find((p) => p.dateKey === '2026-11-12');
+  assert.ok(timedOutDay);
+  assert.equal(timedOutDay.status, 'attempted');
+  assert.equal(timedOutDay.completedCount, 0);
+  assert.ok(timedOutDay.barHeight > 0.1 && timedOutDay.barHeight < 1);
+
+  assert.equal(freq.solvedDays, 6);
+  assert.equal(freq.attemptedOnlyDays, 1);
+  assert.equal(freq.missedDays, 23);
+  assert.equal(freq.activeDaysIn30Days, 7);
+  assert.equal(freq.consistencyPercent, 20);
+  assert.equal(freq.longestRunIn30Days, 3);
+
+  assert.equal(freq.weeklyBuckets.length, 5);
+  const totalInBlocks = freq.weeklyBuckets.reduce(
+    (sum, b) => sum + b.completedDays,
+    0
+  );
+  assert.equal(totalInBlocks, 6);
+});
+
+test('buildDailyStreakDurationSeries tracks streak duration over time and highlights peak streak periods', () => {
+  const { sampleDaily } = createSampleDashboardData('2026-11-19');
+  const trend = buildDailyStreakDurationSeries(sampleDaily, '2026-11-19', 30);
+
+  assert.equal(trend.points.length, 30);
+  assert.equal(trend.peakStreakDuration, 3);
+  assert.equal(trend.currentStreakDuration, 3);
+  assert.equal(trend.activeStreakDays, 6);
+  assert.equal(trend.averageRunLength, 2);
+
+  // Sample has a 2-day run (daysAgo 24..23), 1-day run (daysAgo 11), and 3-day peak run (daysAgo 2..0)
+  assert.equal(trend.peakPeriods.length, 1);
+  assert.equal(trend.peakPeriods[0].startDateKey, '2026-11-17');
+  assert.equal(trend.peakPeriods[0].endDateKey, '2026-11-19');
+  assert.equal(trend.peakPeriods[0].peakLength, 3);
+
+  const peakPoints = trend.points.filter((p) => p.isPeakPoint);
+  assert.equal(peakPoints.length, 1);
+  assert.equal(peakPoints[0].dateKey, '2026-11-19');
+  assert.equal(peakPoints[0].streakLength, 3);
+
+  const inPeakCount = trend.points.filter((p) => p.inPeakPeriod).length;
+  assert.equal(inPeakCount, 3);
+
+  // Empty completions return safe zeros and no peak periods
+  const emptyTrend = buildDailyStreakDurationSeries([], '2026-11-19', 14);
+  assert.equal(emptyTrend.points.length, 14);
+  assert.equal(emptyTrend.peakStreakDuration, 0);
+  assert.equal(emptyTrend.peakPeriods.length, 0);
+  assert.equal(emptyTrend.currentStreakDuration, 0);
 });

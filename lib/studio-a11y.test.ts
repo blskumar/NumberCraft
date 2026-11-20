@@ -12,9 +12,11 @@ describe('Studio Tab Accessibility Metadata (lib/studio-a11y.ts)', () => {
       'dashboard',
       'play-arithmetic',
       'play-factor-grid',
+      'play-equation-foundry',
+      'play-odds-urns',
       'rooms',
       'notebook',
-      'blueprint',
+      'rules',
     ];
     const labels = new Set<string>();
     const ids = new Set<string>();
@@ -52,6 +54,14 @@ describe('Studio Tab Accessibility Metadata (lib/studio-a11y.ts)', () => {
     );
     assert.equal(
       getStudioTabA11yMeta('play-factor-grid', 'addition-attack').isGameArena,
+      true
+    );
+    assert.equal(
+      getStudioTabA11yMeta('play-equation-foundry', 'addition-attack').isGameArena,
+      true
+    );
+    assert.equal(
+      getStudioTabA11yMeta('play-odds-urns', 'addition-attack').isGameArena,
       true
     );
     assert.equal(

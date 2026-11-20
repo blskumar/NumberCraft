@@ -31,7 +31,12 @@ import {
   PRIME_TRAP_BONUS,
   TIER_SPECS,
 } from '@/lib/factor-grid-engine';
-import { playTileClaimSound, playVictoryChord } from '@/lib/sound';
+import {
+  playAchievementChime,
+  playFactorGridMoveSound,
+  playTileClaimSound,
+  playVictoryChord,
+} from '@/lib/sound';
 import type {
   AgeTier,
   AiDifficulty,
@@ -171,6 +176,7 @@ export default function FactorGridPrototype({
       });
       if (unlocked.length > 0) {
         setNewlyUnlockedSeals(unlocked);
+        playAchievementChime(soundEnabled);
       }
     },
     [soundEnabled, onRecordMatch]
@@ -224,10 +230,16 @@ export default function FactorGridPrototype({
   function handleTileClick(tileNumber: number) {
     if (stage !== 'playing' || game.status !== 'playing' || aiThinking) return;
     if (game.mode === 'vs-ai' && game.currentTurn === 'p2') return;
-    if (!isLegalMove(game, tileNumber)) return;
+    if (!isLegalMove(game, tileNumber)) {
+      playFactorGridMoveSound(soundEnabled, { legal: false });
+      return;
+    }
 
     const preview = previewMove(game, tileNumber);
-    playTileClaimSound(soundEnabled, preview.classification.kind === 'prime');
+    playFactorGridMoveSound(soundEnabled, {
+      legal: true,
+      isPrimeClaim: preview.classification.kind === 'prime',
+    });
     const next = applyMove(game, tileNumber);
     setGame(next);
     setHoveredTile(null);

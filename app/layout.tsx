@@ -41,6 +41,8 @@ export const metadata: Metadata = {
   },
 };
 
+const THEME_INIT_SCRIPT = `(function(){try{var p=localStorage.getItem('numbercraft_theme_v1');if(p!=='light'&&p!=='dark'&&p!=='system'){p='system';}var dark=p==='dark'||(p==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var eff=dark?'dark':'light';var r=document.documentElement;r.dataset.theme=eff;r.dataset.themePreference=p;r.classList.toggle('dark',dark);r.style.colorScheme=eff;}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: {
@@ -49,8 +51,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${fraunces.variable} ${plusJakartaSans.variable} ${ibmPlexMono.variable}`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body
         suppressHydrationWarning
         className="min-h-screen bg-[#FAF8F4] text-[#1C232B] font-sans antialiased selection:bg-[#1D4ED8]/15 selection:text-[#1D4ED8]"

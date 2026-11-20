@@ -87,6 +87,85 @@ export interface DashboardOverviewStats {
   totalChallengesCompleted: number;
 }
 
+export type DailyConsistencyStatus = 'solved' | 'attempted' | 'missed';
+
+export interface DailyFrequency30DayPoint {
+  index: number;
+  dateKey: string;
+  dateLabel: string;
+  shortDay: string;
+  dayOfMonth: string;
+  isToday: boolean;
+  status: DailyConsistencyStatus;
+  completedCount: number;
+  barHeight: number;
+  editionNumber: number | null;
+  archetypeTitle: string | null;
+  score: number;
+  secondsUsed: number;
+  timeLimitSeconds: number;
+  mistakes: number;
+  hintsUsed: number;
+}
+
+export interface WeeklyConsistencyBucket {
+  periodIndex: number;
+  label: string;
+  rangeLabel: string;
+  completedDays: number;
+  attemptedDays: number;
+  totalDays: number;
+  completionRatePercent: number;
+}
+
+export interface DailyConsistency30DayData {
+  points: DailyFrequency30DayPoint[];
+  weeklyBuckets: WeeklyConsistencyBucket[];
+  solvedDays: number;
+  attemptedOnlyDays: number;
+  missedDays: number;
+  consistencyPercent: number;
+  longestRunIn30Days: number;
+  activeDaysIn30Days: number;
+  startDateLabel: string;
+  endDateLabel: string;
+}
+
+export interface DailyStreakDurationPoint {
+  index: number;
+  dateKey: string;
+  dateLabel: string;
+  shortDay: string;
+  isToday: boolean;
+  solved: boolean;
+  streakLength: number;
+  isPeakPoint: boolean;
+  inPeakPeriod: boolean;
+  editionNumber: number | null;
+  archetypeTitle: string | null;
+  score: number;
+}
+
+export interface PeakStreakPeriod {
+  startDateKey: string;
+  endDateKey: string;
+  startLabel: string;
+  endLabel: string;
+  peakLength: number;
+}
+
+export interface DailyStreakTrendData {
+  points: DailyStreakDurationPoint[];
+  peakPeriods: PeakStreakPeriod[];
+  peakStreakDuration: number;
+  currentStreakDuration: number;
+  averageRunLength: number;
+  activeStreakDays: number;
+  windowDays: number;
+  startDateLabel: string;
+  endDateLabel: string;
+}
+
 function toLocalDateKeyFromIso(iso: string): string | null {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return null;
@@ -327,6 +406,265 @@ export function buildDailyScoreSpeedSeries(
   }));
 }
 
+export function buildDailyChallenge30DayFrequency(
+  dailyCompletions: DailyChallengeCompletion[],
+  todayKey: string = getLocalDateKey()
+): DailyConsistency30DayData {
+  const dailyByDate = new Map<string, DailyChallengeCompletion>();
+  for (const c of dailyCompletions) {
+    dailyByDate.set(c.dateKey, c);
+  }
+
+  const points: DailyFrequency30DayPoint[] = [];
+  let solvedDays = 0;
+  let attemptedOnlyDays = 0;
+  let longestRunIn30Days = 0;
+  let currentRun = 0;
+
+  for (let offset = -29; offset <= 0; offset += 1) {
+    const dateKey = shiftDateKey(todayKey, offset);
+    const parts = dateKey.split('-').map(Number);
+    const utcDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    const shortDay = utcDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      timeZone: 'UTC',
+    });
+    const entry = dailyByDate.get(dateKey);
+
+    let status: DailyConsistencyStatus = 'missed';
+    let completedCount = 0;
+    let barHeight = 0.08;
+
+    if (entry?.solved) {
+      status = 'solved';
+      completedCount = 1;
+      barHeight = 1;
+      solvedDays += 1;
+      currentRun += 1;
+      if (currentRun > longestRunIn30Days) {
+        longestRunIn30Days = currentRun;
+      }
+    } else if (entry) {
+      status = 'attempted';
+      completedCount = 0;
+      barHeight = 0.42;
+      attemptedOnlyDays += 1;
+      currentRun = 0;
+    } else {
+      currentRun = 0;
+    }
+
+    points.push({
+      index: offset + 30,
+      dateKey,
+      dateLabel: formatMonthDayFromDateKey(dateKey),
+      shortDay,
+      dayOfMonth: String(parts[2] ?? ''),
+      isToday: dateKey === todayKey,
+      status,
+      completedCount,
+      barHeight,
+      editionNumber: entry?.editionNumber ?? null,
+      archetypeTitle: entry?.archetypeTitle ?? null,
+      score: entry?.score ?? 0,
+      secondsUsed: entry?.secondsUsed ?? 0,
+      timeLimitSeconds: entry?.timeLimitSeconds ?? 0,
+      mistakes: entry?.mistakes ?? 0,
+      hintsUsed: entry?.hintsUsed ?? 0,
+    });
+  }
+
+  const weeklyBuckets: WeeklyConsistencyBucket[] = [];
+  const bucketSize = 6;
+  for (let b = 0; b < 5; b += 1) {
+    const slice = points.slice(b * bucketSize, (b + 1) * bucketSize);
+    const completedDays = slice.filter((p) => p.status === 'solved').length;
+    const attemptedDays = slice.filter((p) => p.status === 'attempted').length;
+    const first = slice[0];
+    const last = slice[slice.length - 1];
+    weeklyBuckets.push({
+      periodIndex: b + 1,
+      label: `Days ${b * bucketSize + 1}–${(b + 1) * bucketSize}`,
+      rangeLabel:
+        first && last ? `${first.dateLabel} – ${last.dateLabel}` : `Block ${b + 1}`,
+      completedDays,
+      attemptedDays,
+      totalDays: slice.length,
+      completionRatePercent: Math.round((completedDays / slice.length) * 100),
+    });
+  }
+
+  const missedDays = 30 - solvedDays - attemptedOnlyDays;
+
+  return {
+    points,
+    weeklyBuckets,
+    solvedDays,
+    attemptedOnlyDays,
+    missedDays,
+    consistencyPercent: Math.round((solvedDays / 30) * 100),
+    longestRunIn30Days,
+    activeDaysIn30Days: solvedDays + attemptedOnlyDays,
+    startDateLabel: points[0]?.dateLabel ?? todayKey,
+    endDateLabel: points[points.length - 1]?.dateLabel ?? todayKey,
+  };
+}
+
+export function buildDailyStreakDurationSeries(
+  dailyCompletions: DailyChallengeCompletion[],
+  todayKey: string = getLocalDateKey(),
+  days: number = 30
+): DailyStreakTrendData {
+  const safeDays = Math.max(7, Math.min(90, Math.floor(days)));
+  const dailyByDate = new Map<string, DailyChallengeCompletion>();
+  const solvedDates = new Set<string>();
+
+  for (const c of dailyCompletions) {
+    dailyByDate.set(c.dateKey, c);
+    if (c.solved) {
+      solvedDates.add(c.dateKey);
+    }
+  }
+
+  // Compute exact streak entering the first day of the window
+  const firstWindowDate = shiftDateKey(todayKey, -(safeDays - 1));
+  let priorStreak = 0;
+  let probe = shiftDateKey(firstWindowDate, -1);
+  while (solvedDates.has(probe)) {
+    priorStreak += 1;
+    probe = shiftDateKey(probe, -1);
+  }
+
+  const rawPoints: Omit<DailyStreakDurationPoint, 'isPeakPoint' | 'inPeakPeriod'>[] = [];
+  let running = priorStreak;
+  let peakStreakDuration = 0;
+  let activeStreakDays = 0;
+
+  for (let offset = -(safeDays - 1); offset <= 0; offset += 1) {
+    const dateKey = shiftDateKey(todayKey, offset);
+    const parts = dateKey.split('-').map(Number);
+    const utcDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    const shortDay = utcDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      timeZone: 'UTC',
+    });
+    const entry = dailyByDate.get(dateKey);
+    const solved = Boolean(entry?.solved);
+
+    if (solved) {
+      running += 1;
+      activeStreakDays += 1;
+      if (running > peakStreakDuration) {
+        peakStreakDuration = running;
+      }
+    } else {
+      running = 0;
+    }
+
+    rawPoints.push({
+      index: offset + safeDays,
+      dateKey,
+      dateLabel: formatMonthDayFromDateKey(dateKey),
+      shortDay,
+      isToday: dateKey === todayKey,
+      solved,
+      streakLength: running,
+      editionNumber: entry?.editionNumber ?? null,
+      archetypeTitle: entry?.archetypeTitle ?? null,
+      score: entry?.score ?? 0,
+    });
+  }
+
+  // Segment contiguous solved runs to identify peak streak periods & average run length
+  interface RunSpan {
+    startIdx: number;
+    endIdx: number;
+    maxLength: number;
+  }
+  const runs: RunSpan[] = [];
+  let runStart = -1;
+  let runMax = 0;
+
+  for (let i = 0; i < rawPoints.length; i += 1) {
+    const pt = rawPoints[i];
+    if (pt.solved) {
+      if (runStart === -1) {
+        runStart = i;
+        runMax = pt.streakLength;
+      } else if (pt.streakLength > runMax) {
+        runMax = pt.streakLength;
+      }
+    } else if (runStart !== -1) {
+      runs.push({ startIdx: runStart, endIdx: i - 1, maxLength: runMax });
+      runStart = -1;
+      runMax = 0;
+    }
+  }
+  if (runStart !== -1) {
+    runs.push({
+      startIdx: runStart,
+      endIdx: rawPoints.length - 1,
+      maxLength: runMax,
+    });
+  }
+
+  const peakRunIndexSet = new Set<number>();
+  const peakPeriods: PeakStreakPeriod[] = [];
+
+  if (peakStreakDuration > 0) {
+    for (const run of runs) {
+      if (run.maxLength === peakStreakDuration) {
+        for (let idx = run.startIdx; idx <= run.endIdx; idx += 1) {
+          peakRunIndexSet.add(idx);
+        }
+        const first = rawPoints[run.startIdx];
+        const last = rawPoints[run.endIdx];
+        peakPeriods.push({
+          startDateKey: first.dateKey,
+          endDateKey: last.dateKey,
+          startLabel: first.dateLabel,
+          endLabel: last.dateLabel,
+          peakLength: run.maxLength,
+        });
+      }
+    }
+  }
+
+  const points: DailyStreakDurationPoint[] = rawPoints.map((pt, idx) => ({
+    ...pt,
+    isPeakPoint: peakStreakDuration > 0 && pt.streakLength === peakStreakDuration,
+    inPeakPeriod: peakRunIndexSet.has(idx),
+  }));
+
+  const lastPt = points[points.length - 1];
+  const prevPt = points.length >= 2 ? points[points.length - 2] : null;
+  const currentStreakDuration =
+    lastPt && lastPt.streakLength > 0
+      ? lastPt.streakLength
+      : prevPt?.streakLength ?? 0;
+
+  const averageRunLength =
+    runs.length > 0
+      ? Number(
+          (
+            runs.reduce((sum, r) => sum + r.maxLength, 0) / runs.length
+          ).toFixed(1)
+        )
+      : 0;
+
+  return {
+    points,
+    peakPeriods,
+    peakStreakDuration,
+    currentStreakDuration,
+    averageRunLength,
+    activeStreakDays,
+    windowDays: safeDays,
+    startDateLabel: points[0]?.dateLabel ?? todayKey,
+    endDateLabel: points[points.length - 1]?.dateLabel ?? todayKey,
+  };
+}
+
 export function computeDashboardOverview(
   matches: MatchRecord[],
   dailyCompletions: DailyChallengeCompletion[],
@@ -557,7 +895,7 @@ export function createSampleDashboardData(
     streakBonus: number;
   }[] = [
     {
-      daysAgo: 10,
+      daysAgo: 24,
       archetype: 'equation-vault',
       title: 'Equation Vault',
       secondsUsed: 62,
@@ -568,7 +906,7 @@ export function createSampleDashboardData(
       streakBonus: 0,
     },
     {
-      daysAgo: 9,
+      daysAgo: 23,
       archetype: 'divisor-cipher',
       title: 'Divisor & Sequence Cipher',
       secondsUsed: 54,
@@ -579,7 +917,7 @@ export function createSampleDashboardData(
       streakBonus: 15,
     },
     {
-      daysAgo: 5,
+      daysAgo: 11,
       archetype: 'balance-scale',
       title: 'Algebraic Balance Scale',
       secondsUsed: 48,

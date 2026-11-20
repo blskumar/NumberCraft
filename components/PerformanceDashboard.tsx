@@ -35,6 +35,7 @@ import {
   buildArithmeticAccuracySeries,
   buildArithmeticGameBreakdown,
   buildChallengeCompletionHistory,
+  buildDailyChallenge30DayFrequency,
   buildDailyScoreSpeedSeries,
   computeDashboardOverview,
   isSampleDailyCompletion,
@@ -44,6 +45,9 @@ import {
   type DashboardGameFilter,
   type DashboardTierFilter,
 } from '@/lib/performance-dashboard';
+import DailyConsistencyChart30Day from './DailyConsistencyChart30Day';
+import DailyStreakTrendChart from './DailyStreakTrendChart';
+import DailyLeaderboardCard from './DailyLeaderboardCard';
 import type {
   ArithmeticGameId,
   DailyChallengeCompletion,
@@ -262,6 +266,11 @@ export default function PerformanceDashboard({
   const dailyScoreSpeed = useMemo(
     () => buildDailyScoreSpeedSeries(dailyCompletions),
     [dailyCompletions]
+  );
+
+  const dailyConsistency30Day = useMemo(
+    () => buildDailyChallenge30DayFrequency(dailyCompletions, todayKey),
+    [dailyCompletions, todayKey]
   );
 
   const tierSpec = TIER_SPECS[profile.ageTier];
@@ -1021,6 +1030,31 @@ export default function PerformanceDashboard({
           </div>
         </section>
       </div>
+
+      {/* FULL-WIDTH 30-DAY DAILY CHALLENGE CONSISTENCY BAR CHART */}
+      <DailyConsistencyChart30Day
+        data={dailyConsistency30Day}
+        onOpenDaily={onOpenDaily}
+        hasSampleData={hasSampleData}
+        onLoadSampleDashboard={onLoadSampleDashboard}
+      />
+
+      {/* FULL-WIDTH DAILY CHALLENGE STREAK DURATION LINE CHART */}
+      <DailyStreakTrendChart
+        dailyCompletions={dailyCompletions}
+        todayKey={todayKey}
+        onOpenDaily={onOpenDaily}
+        hasSampleData={hasSampleData}
+        onLoadSampleDashboard={onLoadSampleDashboard}
+      />
+
+      {/* DAILY LEADERBOARD — TOP 5 FOR TODAY'S DAILY CHALLENGE */}
+      <DailyLeaderboardCard
+        profile={profile}
+        dailyCompletions={dailyCompletions}
+        todayKey={todayKey}
+        onOpenDaily={onOpenDaily}
+      />
     </main>
   );
 }

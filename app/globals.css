@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme inline {
   --font-display: var(--font-display), Georgia, serif;
   --font-sans: var(--font-sans), system-ui, sans-serif;
@@ -40,4 +42,144 @@
 .btn-cobalt:active:not(:disabled) {
   transform: translateY(1px);
   box-shadow: 0 1px 0 #1539A3;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Midnight Drafting Slate — Numbercraft Dark Mode                            */
+/* -------------------------------------------------------------------------- */
+html[data-theme="dark"] body {
+  background-color: #0E1319 !important;
+  color: #EDF1F6 !important;
+}
+
+html[data-theme="dark"] .paper-grid {
+  background-color: #0E1319;
+  background-image:
+    radial-gradient(ellipse 80% 45% at 50% 0%, rgba(30, 46, 70, 0.45), transparent 70%),
+    radial-gradient(rgba(148, 163, 184, 0.14) 1px, transparent 1px);
+  background-size: 100% 100%, 24px 24px;
+}
+
+html[data-theme="dark"] .card-tactile {
+  background-color: #161E27 !important;
+  border-color: #2A3646 !important;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 28px -12px rgba(0, 0, 0, 0.55);
+}
+
+/* Archival warm paper surfaces -> deep drafting slate surfaces */
+html[data-theme="dark"] .bg-white,
+html[data-theme="dark"] .bg-\[\#FFFFFF\] {
+  background-color: #1A2430 !important;
+}
+
+html[data-theme="dark"] .bg-\[\#FAF8F4\],
+html[data-theme="dark"] .bg-\[\#FAF8F4\]\/95,
+html[data-theme="dark"] .bg-\[\#F5F1E8\]\/95,
+html[data-theme="dark"] .bg-\[\#FFFDF9\],
+html[data-theme="dark"] .bg-\[\#FFFDF7\],
+html[data-theme="dark"] .bg-\[\#FFFDF2\],
+html[data-theme="dark"] .bg-\[\#F8F5EE\],
+html[data-theme="dark"] .bg-\[\#F7F4ED\] {
+  background-color: #131B24 !important;
+}
+
+html[data-theme="dark"] .bg-\[\#EFECE3\],
+html[data-theme="dark"] .bg-\[\#EFECE4\],
+html[data-theme="dark"] .bg-\[\#F3EFE7\],
+html[data-theme="dark"] .bg-\[\#F1EDE4\],
+html[data-theme="dark"] .bg-\[\#ECE7DD\],
+html[data-theme="dark"] .bg-\[\#E6E0D3\],
+html[data-theme="dark"] .bg-\[\#EAE3D5\] {
+  background-color: #202B38 !important;
+}
+
+/* Semantic tinted surfaces adapted for dark contrast */
+html[data-theme="dark"] .bg-\[\#EFF5FF\] {
+  background-color: rgba(37, 99, 235, 0.18) !important;
+}
+
+html[data-theme="dark"] .bg-\[\#ECFDF5\] {
+  background-color: rgba(16, 185, 129, 0.16) !important;
+}
+
+html[data-theme="dark"] .bg-\[\#FDF6E7\],
+html[data-theme="dark"] .bg-\[\#FEF3C7\] {
+  background-color: rgba(217, 119, 6, 0.18) !important;
+}
+
+html[data-theme="dark"] .bg-\[\#FFF1F2\] {
+  background-color: rgba(225, 29, 72, 0.18) !important;
+}
+
+/* Primary & secondary inks -> crisp warm off-white & cool slate */
+html[data-theme="dark"] .text-\[\#1C232B\],
+html[data-theme="dark"] .text-\[\#334155\] {
+  color: #F1F5F9 !important;
+}
+
+html[data-theme="dark"] .text-\[\#46515E\] {
+  color: #CBD5E1 !important;
+}
+
+html[data-theme="dark"] .text-\[\#5A6572\],
+html[data-theme="dark"] .text-\[\#737E8A\] {
+  color: #94A3B8 !important;
+}
+
+html[data-theme="dark"] .text-\[\#1D4ED8\] {
+  color: #60A5FA !important;
+}
+
+html[data-theme="dark"] .text-\[\#047857\],
+html[data-theme="dark"] .text-\[\#065F46\] {
+  color: #34D399 !important;
+}
+
+html[data-theme="dark"] .text-\[\#B45309\],
+html[data-theme="dark"] .text-\[\#8A5108\] {
+  color: #FBBF24 !important;
+}
+
+html[data-theme="dark"] .text-\[\#BE123C\],
+html[data-theme="dark"] .text-\[\#9F1239\] {
+  color: #FB7185 !important;
+}
+
+/* Keep cobalt primary button text bright white */
+html[data-theme="dark"] .btn-cobalt {
+  background-color: #2563EB;
+  color: #FFFFFF !important;
+  box-shadow: 0 2px 0 #1E40AF, 0 6px 16px -6px rgba(37, 99, 235, 0.55);
+}
+
+html[data-theme="dark"] .btn-cobalt:hover:not(:disabled) {
+  background-color: #3B82F6;
+}
+
+/* Hairline warm borders -> subtle drafting slate borders */
+html[data-theme="dark"] .border-\[\#E5E0D5\],
+html[data-theme="dark"] .border-\[\#E2DCCF\],
+html[data-theme="dark"] .border-\[\#ECE7DD\],
+html[data-theme="dark"] .border-\[\#DFD8CA\],
+html[data-theme="dark"] .border-\[\#D8D0C0\],
+html[data-theme="dark"] .border-\[\#D8D1C4\],
+html[data-theme="dark"] .border-\[\#D6CFC0\],
+html[data-theme="dark"] .border-\[\#DDD5C7\],
+html[data-theme="dark"] .border-\[\#D2C9B8\],
+html[data-theme="dark"] .border-\[\#CFC6B4\] {
+  border-color: #2B3748 !important;
+}
+
+html[data-theme="dark"] .border-\[\#DFC99B\],
+html[data-theme="dark"] .border-\[\#E5D3B3\],
+html[data-theme="dark"] .border-\[\#D4B88C\] {
+  border-color: rgba(251, 191, 36, 0.35) !important;
+}
+
+/* Tactile button bottom bevel shadows softened in dark mode */
+html[data-theme="dark"] [class*="shadow-\[0_2px_0_"],
+html[data-theme="dark"] [class*="shadow-\[0_3px_0_"] {
+  box-shadow: 0 2px 0 #0A0E14 !important;
 }

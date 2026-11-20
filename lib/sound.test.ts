@@ -2,10 +2,16 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getArithmeticSoundCue,
+  getFactorGridSoundTrigger,
+  playAchievementChime,
   playArithmeticFeedbackSound,
+  playFactorGridMoveSound,
+  playSoftErrorBump,
   playSoundPreviewChime,
+  playSuccessChime,
   playTileClaimSound,
   playVictoryChord,
+  triggerAudioCue,
 } from './sound';
 
 describe('Global Audio Feedback (lib/sound.ts)', () => {
@@ -46,6 +52,21 @@ describe('Global Audio Feedback (lib/sound.ts)', () => {
     );
   });
 
+  it('selects subtle Factor Grid move triggers for prime, standard, and blocked moves', () => {
+    assert.equal(
+      getFactorGridSoundTrigger({ legal: false }),
+      'factor-blocked'
+    );
+    assert.equal(
+      getFactorGridSoundTrigger({ legal: true, isPrimeClaim: false }),
+      'factor-claim'
+    );
+    assert.equal(
+      getFactorGridSoundTrigger({ legal: true, isPrimeClaim: true }),
+      'factor-prime-claim'
+    );
+  });
+
   it('safely no-ops when global sound is muted or executed outside browser', () => {
     assert.doesNotThrow(() => {
       playArithmeticFeedbackSound(false, 'correct');
@@ -53,6 +74,13 @@ describe('Global Audio Feedback (lib/sound.ts)', () => {
       playArithmeticFeedbackSound(false, 'stage-up');
       playArithmeticFeedbackSound(false, 'wrong');
       playArithmeticFeedbackSound(true, 'correct');
+      playSuccessChime(true);
+      playSoftErrorBump(true);
+      playAchievementChime(true);
+      playFactorGridMoveSound(true, { legal: false });
+      playFactorGridMoveSound(true, { legal: true, isPrimeClaim: true });
+      triggerAudioCue(true, 'achievement-chime');
+      triggerAudioCue(false, 'soft-error-bump');
       playSoundPreviewChime(false);
       playSoundPreviewChime(true);
       playTileClaimSound(false, true);

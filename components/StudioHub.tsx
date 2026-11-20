@@ -22,6 +22,9 @@ import {
 import studioHeroImg from '@/src/assets/images/studio_hero_desk_1795053506873.jpg';
 import factorGridBannerImg from '@/src/assets/images/factor_grid_banner_1795053505503.jpg';
 import DailyMathQuoteCard from '@/components/DailyMathQuoteCard';
+import DailyGoalRing from '@/components/DailyGoalRing';
+import DailyMilestoneCard from '@/components/DailyMilestoneCard';
+import Tooltip from '@/components/Tooltip';
 import {
   ARITHMETIC_GAME_ORDER,
   ARITHMETIC_GAMES,
@@ -33,12 +36,18 @@ import {
   getLocalDateKey,
   getSecondsUntilNextDaily,
 } from '@/lib/daily-challenge';
+import { computeDailyGoalProgress } from '@/lib/daily-goal';
+import {
+  evaluateDailyMilestone,
+  type DailyMilestoneArenaId,
+} from '@/lib/daily-milestone';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { getStudioGreeting } from '@/lib/greeting';
 import type {
   AgeTier,
   ArithmeticGameId,
   DailyChallengeCompletion,
+  MatchRecord,
 } from '@/lib/types';
 
 interface StudioHubProps {
@@ -47,9 +56,11 @@ interface StudioHubProps {
   onChangeTier: (tier: AgeTier) => void;
   onLaunchFactorGrid: () => void;
   onLaunchArithmetic: (gameId: ArithmeticGameId) => void;
+  onLaunchEquationFoundry: () => void;
+  onLaunchOddsUrns: () => void;
   onOpenDaily: () => void;
   onOpenRooms: () => void;
-  onOpenBlueprint: () => void;
+  matches: MatchRecord[];
   matchesCount: number;
   dailyCompletions: DailyChallengeCompletion[];
 }
@@ -75,9 +86,11 @@ export default function StudioHub({
   onChangeTier,
   onLaunchFactorGrid,
   onLaunchArithmetic,
+  onLaunchEquationFoundry,
+  onLaunchOddsUrns,
   onOpenDaily,
   onOpenRooms,
-  onOpenBlueprint,
+  matches,
   matchesCount,
   dailyCompletions,
 }: StudioHubProps) {
@@ -91,6 +104,38 @@ export default function StudioHub({
     () => computeDailyStreakStats(dailyCompletions, todayKey),
     [dailyCompletions, todayKey]
   );
+  const dailyGoalProgress = useMemo(
+    () =>
+      computeDailyGoalProgress({
+        matches,
+        dailyCompletions,
+        todayKey,
+      }),
+    [matches, dailyCompletions, todayKey]
+  );
+  const dailyMilestoneStatus = useMemo(
+    () => evaluateDailyMilestone(matches, todayKey),
+    [matches, todayKey]
+  );
+
+  const handleLaunchMilestoneArena = (arenaId: DailyMilestoneArenaId) => {
+    switch (arenaId) {
+      case 'addition-attack':
+      case 'subtraction-sprint':
+      case 'multiplication-mastery':
+        onLaunchArithmetic(arenaId);
+        break;
+      case 'equation-foundry':
+        onLaunchEquationFoundry();
+        break;
+      case 'odds-urns':
+        onLaunchOddsUrns();
+        break;
+      case 'factor-grid':
+        onLaunchFactorGrid();
+        break;
+    }
+  };
   const [nextDailyCountdown, setNextDailyCountdown] = useState('--:--:--');
   const [currentHour, setCurrentHour] = useState<number | null>(null);
 
@@ -164,33 +209,48 @@ export default function StudioHub({
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-3.5">
-            <button
-              type="button"
-              data-start="true"
-              onClick={() => onLaunchArithmetic('addition-attack')}
-              className="btn-cobalt inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+            <Tooltip
+              content="Launch adaptive Addition, Subtraction, and Multiplication fluency sprints"
+              placement="top"
             >
-              Play Core Arithmetic
-              <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
-            </button>
+              <button
+                type="button"
+                data-start="true"
+                onClick={() => onLaunchArithmetic('addition-attack')}
+                className="btn-cobalt inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+              >
+                Play Core Arithmetic
+                <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+              </button>
+            </Tooltip>
 
-            <button
-              type="button"
-              onClick={onLaunchFactorGrid}
-              className="inline-flex items-center gap-2 rounded-xl border border-[#D8D0C0] bg-[#FAF8F4] px-4 py-3 text-sm font-semibold text-[#1C232B] shadow-[0_2px_0_#E5DEC9] hover:-translate-y-0.5 hover:border-[#1D4ED8] hover:text-[#1D4ED8] active:translate-y-0 transition-all whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+            <Tooltip
+              content="Claim numbers and outsmart Minimax AI on a territorial divisor grid"
+              placement="top"
             >
-              <Grid3X3 className="h-4 w-4 shrink-0" aria-hidden="true" />
-              Play Factor Grid
-            </button>
+              <button
+                type="button"
+                onClick={onLaunchFactorGrid}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#D8D0C0] bg-[#FAF8F4] px-4 py-3 text-sm font-semibold text-[#1C232B] shadow-[0_2px_0_#E5DEC9] hover:-translate-y-0.5 hover:border-[#1D4ED8] hover:text-[#1D4ED8] active:translate-y-0 transition-all whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+              >
+                <Grid3X3 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                Play Factor Grid
+              </button>
+            </Tooltip>
 
-            <button
-              type="button"
-              onClick={onOpenRooms}
-              className="inline-flex items-center gap-2 rounded-xl border border-[#D8D0C0] bg-white px-4 py-3 text-sm font-semibold text-[#5A6572] hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+            <Tooltip
+              content="Create a private 6-character room to play Factor Grid with friends"
+              placement="top"
             >
-              <Users className="h-4 w-4 shrink-0" aria-hidden="true" />
-              Online Rooms
-            </button>
+              <button
+                type="button"
+                onClick={onOpenRooms}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#D8D0C0] bg-white px-4 py-3 text-sm font-semibold text-[#5A6572] hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+              >
+                <Users className="h-4 w-4 shrink-0" aria-hidden="true" />
+                Online Rooms
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -246,30 +306,52 @@ export default function StudioHub({
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
-            data-testid="open-daily-challenge-btn"
-            onClick={onOpenDaily}
-            className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold whitespace-nowrap transition-all ${
+          <Tooltip
+            content={
               dailyStats.solvedToday
-                ? 'border border-[#047857]/40 bg-[#ECFDF5] text-[#047857] hover:bg-[#D1FAE5]'
-                : 'btn-cobalt'
-            }`}
+                ? 'Inspect your completed Daily Challenge stamp and step breakdown'
+                : 'Solve 3 chained clues before the timer runs out to keep your streak alive'
+            }
+            placement="top"
           >
-            {dailyStats.solvedToday ? (
-              <>
-                <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
-                View Today’s Stamp
-              </>
-            ) : (
-              <>
-                Solve Today’s Puzzle
-                <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
-              </>
-            )}
-          </button>
+            <button
+              type="button"
+              data-testid="open-daily-challenge-btn"
+              onClick={onOpenDaily}
+              className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold whitespace-nowrap transition-all ${
+                dailyStats.solvedToday
+                  ? 'border border-[#047857]/40 bg-[#ECFDF5] text-[#047857] hover:bg-[#D1FAE5]'
+                  : 'btn-cobalt'
+              }`}
+            >
+              {dailyStats.solvedToday ? (
+                <>
+                  <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  View Today’s Stamp
+                </>
+              ) : (
+                <>
+                  Solve Today’s Puzzle
+                  <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+                </>
+              )}
+            </button>
+          </Tooltip>
         </div>
       </section>
+
+      {/* Daily Goal Progress Ring & Consecutive Daily Streak Flame Counter */}
+      <DailyGoalRing
+        progress={dailyGoalProgress}
+        onStartPractice={() => onLaunchArithmetic('addition-attack')}
+        onOpenDaily={onOpenDaily}
+      />
+
+      {/* Daily Milestone — Rotating Focus Arena with 1.5x Mastery Seal Multiplier */}
+      <DailyMilestoneCard
+        status={dailyMilestoneStatus}
+        onLaunchArena={handleLaunchMilestoneArena}
+      />
 
       {/* Adaptive Tier Bar */}
       <section
@@ -495,19 +577,25 @@ export default function StudioHub({
             </div>
 
             <div className="px-6 pb-6">
-              <button
-                type="button"
-                onClick={onLaunchFactorGrid}
-                className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+              <Tooltip
+                content="Play territorial divisor-capture strategy in Solo, vs. AI, or Pass-and-Play"
+                placement="top"
+                className="w-full"
               >
-                <Grid3X3 className="h-4 w-4 shrink-0" aria-hidden="true" />
-                Open Factor Grid
-              </button>
+                <button
+                  type="button"
+                  onClick={onLaunchFactorGrid}
+                  className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+                >
+                  <Grid3X3 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Open Factor Grid
+                </button>
+              </Tooltip>
             </div>
           </article>
 
-          {/* Equation Foundry Blueprint Card */}
-          <article className="card-tactile flex flex-col justify-between overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_14px_28px_-12px_rgba(28,35,43,0.14)]">
+          {/* Equation Foundry Live Studio Card */}
+          <article className="card-tactile flex flex-col justify-between overflow-hidden rounded-2xl border-[#1D4ED8]/35 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_14px_28px_-12px_rgba(29,78,216,0.16)]">
             <div>
               <div className="flex h-48 flex-col justify-center border-b border-[#E5E0D5] bg-[#F8F5EE] px-6 py-5">
                 <p className="text-xs text-[#5A6572] font-mono">
@@ -545,16 +633,16 @@ export default function StudioHub({
               </div>
 
               <div className="p-6">
-                <p className="text-xs font-medium text-[#5A6572]">
-                  Set 01 Extension · Expression Building · Blueprint Ready
+                <p className="text-xs font-semibold text-[#1D4ED8]">
+                  Set 01 Extension · Expression Building · Playable Now
                 </p>
                 <h3 className="mt-1.5 font-display text-xl font-semibold text-[#1C232B]">
                   Equation Foundry
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-[#46515E]">
                   Combine tactile number tiles and operators to forge target
-                  values step-by-step, extending arithmetic fluency into order
-                  of operations.
+                  values step-by-step against the deterministic Expression
+                  Solver AI.
                 </p>
                 <p className="mt-4 border-t border-[#ECE7DD] pt-4 text-xs text-[#5A6572]">
                   <strong className="font-semibold text-[#1C232B]">
@@ -566,19 +654,26 @@ export default function StudioHub({
             </div>
 
             <div className="px-6 pb-6">
-              <button
-                type="button"
-                onClick={onOpenBlueprint}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#D8D0C0] bg-[#FAF8F4] px-4 py-2.5 text-sm font-semibold text-[#1C232B] shadow-[0_2px_0_#E5DEC9] hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors whitespace-nowrap"
+              <Tooltip
+                content="Forge target numbers with PEMDAS tiles and compare against Solver AI"
+                placement="top"
+                className="w-full"
               >
-                <Calculator className="h-4 w-4 shrink-0" aria-hidden="true" />
-                Inspect Studio Blueprint
-              </button>
+                <button
+                  type="button"
+                  data-testid="launch-equation-foundry"
+                  onClick={onLaunchEquationFoundry}
+                  className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+                >
+                  <Calculator className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Play Equation Foundry
+                </button>
+              </Tooltip>
             </div>
           </article>
 
-          {/* Set 2 Blueprint Card: Odds & Urns */}
-          <article className="card-tactile flex flex-col justify-between overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_14px_28px_-12px_rgba(28,35,43,0.14)]">
+          {/* Set 2 Live Studio Card: Odds & Urns */}
+          <article className="card-tactile flex flex-col justify-between overflow-hidden rounded-2xl border-[#047857]/35 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_14px_28px_-12px_rgba(4,120,87,0.16)]">
             <div>
               <div className="flex h-48 flex-col justify-center border-b border-[#E5E0D5] bg-[#F8F5EE] px-6 py-5">
                 <div className="flex items-center justify-between text-xs text-[#5A6572] font-mono">
@@ -607,8 +702,8 @@ export default function StudioHub({
               </div>
 
               <div className="p-6">
-                <p className="text-xs font-medium text-[#5A6572]">
-                  Set 02 · Modular Probability · Blueprint Ready
+                <p className="text-xs font-semibold text-[#047857]">
+                  Set 02 · Modular Probability · Playable Now
                 </p>
                 <h3 className="mt-1.5 font-display text-xl font-semibold text-[#1C232B]">
                   Odds &amp; Urns
@@ -628,14 +723,21 @@ export default function StudioHub({
             </div>
 
             <div className="px-6 pb-6">
-              <button
-                type="button"
-                onClick={onOpenBlueprint}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#D8D0C0] bg-[#FAF8F4] px-4 py-2.5 text-sm font-semibold text-[#1C232B] shadow-[0_2px_0_#E5DEC9] hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors whitespace-nowrap"
+              <Tooltip
+                content="Explore Marble Urn, Twin Dice, and Conditional Spinner chambers vs. EV Bot"
+                placement="top"
+                className="w-full"
               >
-                <Dices className="h-4 w-4 shrink-0" aria-hidden="true" />
-                Inspect Set 02 Blueprint
-              </button>
+                <button
+                  type="button"
+                  data-testid="launch-odds-urns"
+                  onClick={onLaunchOddsUrns}
+                  className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+                >
+                  <Dices className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Play Odds &amp; Urns
+                </button>
+              </Tooltip>
             </div>
           </article>
         </div>

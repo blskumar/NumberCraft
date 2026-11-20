@@ -151,6 +151,7 @@ export interface MatchRecord {
   playedAt: string;
   arithmeticMeta?: ArithmeticMatchMeta;
   dailyMeta?: DailyMatchMeta;
+  dailyMilestoneMultiplier?: number;
 }
 
 export type AchievementId =
@@ -177,10 +178,13 @@ export interface EarnedBadgeRecord {
 
 export type AuthProviderKind = 'guest' | 'google' | 'email';
 
+export type ThemePreference = 'light' | 'dark' | 'system';
+
 export interface StudentProfile {
   displayName: string;
   ageTier: AgeTier;
   soundEnabled: boolean;
+  themePreference?: ThemePreference;
   sessionKind: 'guest' | 'signed-in-preview';
   authProvider?: AuthProviderKind;
   email?: string | null;

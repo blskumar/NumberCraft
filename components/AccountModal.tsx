@@ -11,8 +11,11 @@ import {
   LogIn,
   LogOut,
   Mail,
+  Monitor,
+  Moon,
   ShieldCheck,
   Sparkles,
+  Sun,
   UserPlus,
   Volume2,
   VolumeX,
@@ -25,7 +28,12 @@ import {
 } from '@/lib/achievements';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { playSoundPreviewChime } from '@/lib/sound';
-import type { AchievementId, AgeTier, StudentProfile } from '@/lib/types';
+import type {
+  AchievementId,
+  AgeTier,
+  StudentProfile,
+  ThemePreference,
+} from '@/lib/types';
 
 interface AccountModalProps {
   open: boolean;
@@ -34,6 +42,8 @@ interface AccountModalProps {
   matchCount: number;
   achievementEvaluation: AchievementEvaluation;
   recentlyUnlockedBadgeIds?: AchievementId[];
+  themePreference: ThemePreference;
+  onChangeTheme: (next: ThemePreference) => void;
   onUpdateProfile: (next: StudentProfile) => void;
   onClearLocalProgress: () => void;
   onOpenNotebook: () => void;
@@ -70,6 +80,8 @@ function AccountModalBody({
   matchCount,
   achievementEvaluation,
   recentlyUnlockedBadgeIds = [],
+  themePreference,
+  onChangeTheme,
   onUpdateProfile,
   onClearLocalProgress,
   onOpenNotebook,
@@ -658,9 +670,60 @@ function AccountModalBody({
               </div>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-[#5A6572]">
-              Synced globally across Addition Attack, Subtraction Sprint,
-              Multiplication Mastery, Daily Challenge, and Factor Grid.
+              Synced globally across Core Arithmetic, Equation Foundry, Odds
+              &amp; Urns, Daily Challenge, and Factor Grid.
             </p>
+
+            {/* Appearance Mode: Light / Dark / System */}
+            <div className="mt-5 border-t border-[#ECE7DD] pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  id="appearance-theme-label"
+                  className="text-xs font-semibold text-[#1C232B]"
+                >
+                  Appearance Mode
+                </span>
+                <span className="font-mono text-[11px] text-[#5A6572]">
+                  Light · Dark · System
+                </span>
+              </div>
+              <div
+                role="radiogroup"
+                aria-labelledby="appearance-theme-label"
+                className="mt-2 grid grid-cols-3 gap-2"
+              >
+                {(
+                  [
+                    { id: 'light', label: 'Light', icon: Sun },
+                    { id: 'dark', label: 'Dark', icon: Moon },
+                    { id: 'system', label: 'System', icon: Monitor },
+                  ] as const
+                ).map(({ id, label, icon: Icon }) => {
+                  const active = themePreference === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      data-testid={`theme-option-${id}`}
+                      onClick={() => {
+                        onChangeTheme(id);
+                        setStatusMessage(`Appearance mode set to ${label}.`);
+                      }}
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] ${
+                        active
+                          ? 'border-[#1D4ED8] bg-[#EFF5FF] text-[#1D4ED8]'
+                          : 'border-[#D8D1C4] bg-[#FAF8F4] text-[#5A6572] hover:border-[#1D4ED8] hover:text-[#1C232B]'
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Quick Auth Status Card */}
             <div className="mt-5 rounded-xl border border-[#E5E0D5] bg-[#FAF8F4] p-4">
@@ -1179,6 +1242,8 @@ export default function AccountModal(props: AccountModalProps) {
       matchCount={props.matchCount}
       achievementEvaluation={props.achievementEvaluation}
       recentlyUnlockedBadgeIds={props.recentlyUnlockedBadgeIds}
+      themePreference={props.themePreference}
+      onChangeTheme={props.onChangeTheme}
       onUpdateProfile={props.onUpdateProfile}
       onClearLocalProgress={props.onClearLocalProgress}
       onOpenNotebook={props.onOpenNotebook}

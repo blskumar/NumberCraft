@@ -42,6 +42,7 @@ export interface AchievementEvaluation {
   hasSampleMatches: boolean;
   dailySolvedCount: number;
   bestDailyStreak: number;
+  dailyMilestoneBoostedCount: number;
 }
 
 export const TOP_SCORER_SHARE_THRESHOLD = 0.55; // 55% of Classic board sum
@@ -210,6 +211,12 @@ export function evaluateAchievements(
     )
   );
   const competitiveMatches = realMatches.filter(isCompetitiveMatch);
+  const dailyMilestoneBoostedCount = allMatches.filter(
+    (m) =>
+      !isSampleMatch(m) &&
+      typeof m.dailyMilestoneMultiplier === 'number' &&
+      m.dailyMilestoneMultiplier > 1
+  ).length;
 
   const persistedMap = new Map<AchievementId, EarnedBadgeRecord>();
   for (const rec of persistedEarned) {
@@ -241,7 +248,11 @@ export function evaluateAchievements(
 
   for (const m of realMatches) {
     const clampedPrimes = Math.max(0, Math.floor(m.primesClaimed));
-    totalPrimes += clampedPrimes;
+    const primeMult =
+      m.dailyMilestoneMultiplier && m.dailyMilestoneMultiplier > 1
+        ? m.dailyMilestoneMultiplier
+        : 1;
+    totalPrimes += Math.round(clampedPrimes * primeMult);
     if (!primeUnlockMatch && totalPrimes >= 10) {
       primeUnlockMatch = m;
     }
@@ -257,7 +268,11 @@ export function evaluateAchievements(
       competitiveWins += 1;
       if (!firstWinMatch) firstWinMatch = m;
 
-      currentStreak += 1;
+      const streakCredit =
+        m.dailyMilestoneMultiplier && m.dailyMilestoneMultiplier > 1
+          ? m.dailyMilestoneMultiplier
+          : 1;
+      currentStreak = Number((currentStreak + streakCredit).toFixed(2));
       if (currentStreak > bestStreak) {
         bestStreak = currentStreak;
       }
@@ -484,5 +499,6 @@ export function evaluateAchievements(
     hasSampleMatches,
     dailySolvedCount: dailyStats.totalSolved,
     bestDailyStreak: dailyStats.bestStreak,
+    dailyMilestoneBoostedCount,
   };
 }
