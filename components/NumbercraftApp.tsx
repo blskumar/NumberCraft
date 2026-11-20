@@ -13,6 +13,7 @@ import MasteryNotebook from '@/components/MasteryNotebook';
 import PerformanceDashboard from '@/components/PerformanceDashboard';
 import BlueprintOverview from '@/components/BlueprintOverview';
 import AccountModal from '@/components/AccountModal';
+import MasteryProgressBar from '@/components/MasteryProgressBar';
 import {
   evaluateAchievements,
   type AchievementDefinition,
@@ -347,6 +348,12 @@ export default function NumbercraftApp() {
       >
         {tabAnnouncement}
       </div>
+
+      <MasteryProgressBar
+        earnedCount={achievementEvaluation.earnedCount}
+        totalCount={achievementEvaluation.totalCount}
+        onOpenNotebook={() => setActiveTab('notebook')}
+      />
 
       <TopNav
         activeTab={activeTab}

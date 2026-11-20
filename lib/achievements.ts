@@ -55,6 +55,18 @@ export function getTopScorerThreshold(tier: AgeTier): number {
   return Math.ceil(getBoardBaseSum(tier) * TOP_SCORER_SHARE_THRESHOLD);
 }
 
+/**
+ * Returns the clamped integer percentage (0–100) of Mastery Seals earned
+ * relative to the total available achievements.
+ */
+export function getMasterySealProgressPercent(
+  earnedCount: number,
+  totalCount: number
+): number {
+  if (totalCount <= 0 || !Number.isFinite(earnedCount)) return 0;
+  return Math.min(100, Math.max(0, Math.round((earnedCount / totalCount) * 100)));
+}
+
 export const ACHIEVEMENT_CATALOG: AchievementDefinition[] = [
   {
     id: 'first-victory',

@@ -4,6 +4,7 @@ import {
   ACHIEVEMENT_CATALOG,
   evaluateAchievements,
   getBoardBaseSum,
+  getMasterySealProgressPercent,
   getTopScorerThreshold,
 } from './achievements';
 import { createSampleMatches } from './notebook-analytics';
@@ -160,4 +161,14 @@ test('Prime Collector unlocks at 10 cumulative primes and persisted badges stay 
     evaluation.newlyUnlocked.map((d) => d.id),
     ['prime-collector']
   );
+});
+
+test('getMasterySealProgressPercent calculates clamped percentage progress accurately', () => {
+  assert.equal(getMasterySealProgressPercent(0, 12), 0);
+  assert.equal(getMasterySealProgressPercent(3, 12), 25);
+  assert.equal(getMasterySealProgressPercent(5, 12), 42);
+  assert.equal(getMasterySealProgressPercent(12, 12), 100);
+  assert.equal(getMasterySealProgressPercent(15, 12), 100);
+  assert.equal(getMasterySealProgressPercent(-2, 12), 0);
+  assert.equal(getMasterySealProgressPercent(3, 0), 0);
 });
