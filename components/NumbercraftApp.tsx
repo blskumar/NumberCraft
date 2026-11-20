@@ -24,6 +24,7 @@ import ConfettiCelebration from '@/components/ConfettiCelebration';
 import EndOfSessionModal from '@/components/EndOfSessionModal';
 import {
   evaluateAchievements,
+  getRecentEarnedAchievements,
   type AchievementDefinition,
 } from '@/lib/achievements';
 import {
@@ -405,6 +406,15 @@ export default function NumbercraftApp() {
   const achievementEvaluation = useMemo(
     () => evaluateAchievements(matches, earnedBadges, dailyCompletions),
     [matches, earnedBadges, dailyCompletions]
+  );
+
+  const earnedSealHistory = useMemo(
+    () =>
+      getRecentEarnedAchievements(
+        achievementEvaluation,
+        achievementEvaluation.totalCount
+      ),
+    [achievementEvaluation]
   );
 
   const resetArenaSession = useCallback(() => {
@@ -943,6 +953,7 @@ export default function NumbercraftApp() {
       <MasteryProgressBar
         earnedCount={achievementEvaluation.earnedCount}
         totalCount={achievementEvaluation.totalCount}
+        earnedHistory={earnedSealHistory}
         onOpenNotebook={() => requestNavigateTab('notebook')}
         unlockEventKey={masteryUnlockEventKey}
         latestUnlockedTitle={latestUnlockedSealTitle}
@@ -1043,10 +1054,12 @@ export default function NumbercraftApp() {
                 profile={profile}
                 matches={matches}
                 dailyCompletions={dailyCompletions}
+                achievementEvaluation={achievementEvaluation}
                 onChangeDailyGoal={handleChangeDailyGoal}
                 onLaunchArithmetic={handleLaunchArithmetic}
                 onLaunchGame={handleLaunchAnyGame}
                 onOpenDaily={() => requestNavigateTab('daily')}
+                onOpenNotebook={() => requestNavigateTab('notebook')}
                 onOpenRegister={() => openRegistrationGate()}
                 onLoadSampleDashboard={handleLoadSampleDashboard}
                 onClearSampleDashboard={handleClearSampleMatches}

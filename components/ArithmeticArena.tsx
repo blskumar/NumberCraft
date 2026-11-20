@@ -291,21 +291,19 @@ export default function ArithmeticArena({
   // Countdown / Elapsed timer during active play
   useEffect(() => {
     if (phase !== 'playing') return;
+    const totalSeconds = ARITHMETIC_PACES[pace].seconds;
     const interval = window.setInterval(() => {
-      setElapsedSeconds((prev) => {
-        const next = prev + 1;
-        statsRef.current.elapsedSeconds = next;
-        return next;
-      });
+      const nextElapsed = statsRef.current.elapsedSeconds + 1;
+      statsRef.current.elapsedSeconds = nextElapsed;
+      setElapsedSeconds(nextElapsed);
+
       if (!untimed) {
-        setSecondsLeft((prev) => {
-          if (prev <= 1) {
-            window.clearInterval(interval);
-            finalizeRound(ARITHMETIC_PACES[pace].seconds);
-            return 0;
-          }
-          return prev - 1;
-        });
+        const nextRemaining = Math.max(0, totalSeconds - nextElapsed);
+        setSecondsLeft(nextRemaining);
+        if (nextRemaining <= 0) {
+          window.clearInterval(interval);
+          finalizeRound(totalSeconds);
+        }
       }
     }, 1000);
 
@@ -442,17 +440,15 @@ export default function ArithmeticArena({
         );
         return;
       }
-      setInputValue((prev) => {
-        if (prev.replace('-', '').length >= 5) return prev;
-        const next = prev === '0' ? digit : `${prev}${digit}`;
-        if (autoSubmit && Number(next) === problem.answer) {
-          // Defer submission slightly via microtask so render never mutates mid-updater
-          queueMicrotask(() => submitAnswer(next));
-        }
-        return next;
-      });
+      if (inputValue.replace('-', '').length >= 5) return;
+      const next = inputValue === '0' ? digit : `${inputValue}${digit}`;
+      if (autoSubmit && Number(next) === problem.answer) {
+        submitAnswer(next);
+        return;
+      }
+      setInputValue(next);
     },
-    [phase, problem, autoSubmit, submitAnswer]
+    [phase, problem, inputValue, autoSubmit, submitAnswer]
   );
 
   const handleBackspace = useCallback(() => {

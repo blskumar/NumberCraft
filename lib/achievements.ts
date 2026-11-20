@@ -93,6 +93,84 @@ export function shouldTriggerMasteryUnlockPulse(
   return input.nextEarnedCount > input.prevEarnedCount;
 }
 
+export interface RecentAchievementItem {
+  id: AchievementId;
+  title: string;
+  shortTitle: string;
+  description: string;
+  criteriaNote: string;
+  accent: AchievementAccent;
+  unlockedAt: string | null;
+  unlockedTimestamp: number;
+  dateLabel: string;
+  fullDateLabel: string;
+}
+
+function formatEarnedDateLabel(unlockedAt: string | null): string {
+  if (!unlockedAt) return 'Recently earned';
+  const parsed = new Date(unlockedAt);
+  if (Number.isNaN(parsed.getTime())) return 'Recently earned';
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function formatEarnedFullDateLabel(unlockedAt: string | null): string {
+  if (!unlockedAt) return 'Date unavailable';
+  const parsed = new Date(unlockedAt);
+  if (Number.isNaN(parsed.getTime())) return 'Date unavailable';
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Extracts up to `limit` (default 5) most recently earned Mastery Seals from an
+ * AchievementEvaluation, ordered newest-first by `unlockedAt` timestamp.
+ */
+export function getRecentEarnedAchievements(
+  evaluation: AchievementEvaluation,
+  limit = 5
+): RecentAchievementItem[] {
+  const safeLimit = Math.max(0, Math.floor(limit));
+  if (safeLimit === 0) return [];
+
+  return evaluation.statuses
+    .filter((status) => status.earned)
+    .map((status, catalogIndex) => {
+      const parsedMs = status.unlockedAt
+        ? Date.parse(status.unlockedAt)
+        : Number.NaN;
+      const unlockedTimestamp = Number.isFinite(parsedMs) ? parsedMs : 0;
+      return {
+        catalogIndex,
+        item: {
+          id: status.definition.id,
+          title: status.definition.title,
+          shortTitle: status.definition.shortTitle,
+          description: status.definition.description,
+          criteriaNote: status.definition.criteriaNote,
+          accent: status.definition.accent,
+          unlockedAt: status.unlockedAt,
+          unlockedTimestamp,
+          dateLabel: formatEarnedDateLabel(status.unlockedAt),
+          fullDateLabel: formatEarnedFullDateLabel(status.unlockedAt),
+        },
+      };
+    })
+    .sort((a, b) => {
+      if (b.item.unlockedTimestamp !== a.item.unlockedTimestamp) {
+        return b.item.unlockedTimestamp - a.item.unlockedTimestamp;
+      }
+      return a.catalogIndex - b.catalogIndex;
+    })
+    .slice(0, safeLimit)
+    .map((entry) => entry.item);
+}
+
 export const ACHIEVEMENT_CATALOG: AchievementDefinition[] = [
   {
     id: 'first-victory',

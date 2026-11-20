@@ -5,6 +5,7 @@ import {
   evaluateAchievements,
   getBoardBaseSum,
   getMasterySealProgressPercent,
+  getRecentEarnedAchievements,
   getTopScorerThreshold,
   shouldTriggerMasteryUnlockPulse,
 } from './achievements';
@@ -248,4 +249,36 @@ test('shouldTriggerMasteryUnlockPulse suppresses hydration/reset and fires on ne
     }),
     false
   );
+});
+
+test('getRecentEarnedAchievements returns up to 5 most recently earned badges sorted newest-first', () => {
+  const emptyEval = evaluateAchievements([], []);
+  assert.deepEqual(getRecentEarnedAchievements(emptyEval), []);
+
+  const persisted: EarnedBadgeRecord[] = [
+    { id: 'first-victory', unlockedAt: '2026-11-01T09:00:00.000Z' },
+    { id: 'top-scorer', unlockedAt: '2026-11-18T14:00:00.000Z' },
+    { id: 'daily-pioneer', unlockedAt: '2026-11-12T10:00:00.000Z' },
+    { id: 'daily-lightning', unlockedAt: '2026-11-20T08:30:00.000Z' },
+    { id: 'prime-collector', unlockedAt: '2026-11-15T11:00:00.000Z' },
+    { id: 'daily-flawless', unlockedAt: '2026-11-19T16:15:00.000Z' },
+    { id: 'taxman-victor', unlockedAt: '2026-11-05T12:00:00.000Z' },
+  ];
+
+  const evaluation = evaluateAchievements([], persisted);
+  const recent = getRecentEarnedAchievements(evaluation, 5);
+
+  assert.equal(recent.length, 5);
+  assert.deepEqual(
+    recent.map((r) => r.id),
+    [
+      'daily-lightning',
+      'daily-flawless',
+      'top-scorer',
+      'prime-collector',
+      'daily-pioneer',
+    ]
+  );
+  assert.ok(recent[0].dateLabel.includes('Nov'));
+  assert.ok(recent[0].fullDateLabel.includes('2026'));
 });

@@ -54,7 +54,9 @@ import {
   type DashboardGameFilter,
   type DashboardTierFilter,
 } from '@/lib/performance-dashboard';
+import type { AchievementEvaluation } from '@/lib/achievements';
 import DashboardDailyGoalCard from './DashboardDailyGoalCard';
+import RecentAchievementsFeed from './RecentAchievementsFeed';
 import DailyConsistencyChart30Day from './DailyConsistencyChart30Day';
 import DailyStreakTrendChart from './DailyStreakTrendChart';
 import DailyGoalCompletionRateChart from './DailyGoalCompletionRateChart';
@@ -71,10 +73,12 @@ interface PerformanceDashboardProps {
   profile: StudentProfile;
   matches: MatchRecord[];
   dailyCompletions: DailyChallengeCompletion[];
+  achievementEvaluation: AchievementEvaluation;
   onChangeDailyGoal: (nextGoal: number) => void;
   onLaunchArithmetic: (gameId: ArithmeticGameId) => void;
   onLaunchGame: (gameId: PlayableGameId) => void;
   onOpenDaily: () => void;
+  onOpenNotebook: () => void;
   onOpenRegister: () => void;
   onLoadSampleDashboard: () => void;
   onClearSampleDashboard: () => void;
@@ -236,10 +240,12 @@ export default function PerformanceDashboard({
   profile,
   matches,
   dailyCompletions,
+  achievementEvaluation,
   onChangeDailyGoal,
   onLaunchArithmetic,
   onLaunchGame,
   onOpenDaily,
+  onOpenNotebook,
   onOpenRegister,
   onLoadSampleDashboard,
   onClearSampleDashboard,
@@ -501,6 +507,15 @@ export default function PerformanceDashboard({
         onChangeDailyGoal={onChangeDailyGoal}
         onStartPractice={() => onLaunchArithmetic('addition-attack')}
         onOpenDaily={onOpenDaily}
+      />
+
+      {/* RECENT ACHIEVEMENTS FEED — SCROLLS 5 MOST RECENTLY EARNED BADGES */}
+      <RecentAchievementsFeed
+        achievementEvaluation={achievementEvaluation}
+        hasSampleData={hasSampleData}
+        onOpenNotebook={onOpenNotebook}
+        onOpenDaily={onOpenDaily}
+        onLoadSampleDashboard={onLoadSampleDashboard}
       />
 
       {/* CHART 1: Arithmetic Accuracy & Adaptive Band Over Time */}

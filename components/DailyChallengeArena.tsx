@@ -281,19 +281,16 @@ export default function DailyChallengeArena({
   useEffect(() => {
     if (phase !== 'playing') return;
     const interval = window.setInterval(() => {
-      setElapsedSeconds((prev) => {
-        const next = prev + 1;
-        liveStatsRef.current.elapsedSeconds = next;
-        return next;
-      });
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(interval);
-          finalizeDailyAttempt(false, puzzle.timeLimitSeconds);
-          return 0;
-        }
-        return prev - 1;
-      });
+      const nextElapsed = liveStatsRef.current.elapsedSeconds + 1;
+      liveStatsRef.current.elapsedSeconds = nextElapsed;
+      setElapsedSeconds(nextElapsed);
+
+      const nextRemaining = Math.max(0, puzzle.timeLimitSeconds - nextElapsed);
+      setSecondsLeft(nextRemaining);
+      if (nextRemaining <= 0) {
+        window.clearInterval(interval);
+        finalizeDailyAttempt(false, puzzle.timeLimitSeconds);
+      }
     }, 1000);
     return () => window.clearInterval(interval);
   }, [phase, puzzle.timeLimitSeconds, finalizeDailyAttempt]);
@@ -308,11 +305,9 @@ export default function DailyChallengeArena({
         copy[stepIdx] = true;
         return copy;
       });
-      setHintsUsed((prev) => {
-        const next = prev + 1;
-        liveStatsRef.current.hintsUsed = next;
-        return next;
-      });
+      const nextHints = liveStatsRef.current.hintsUsed + 1;
+      liveStatsRef.current.hintsUsed = nextHints;
+      setHintsUsed(nextHints);
     }
     setShowHint((prev) => !prev);
   }, [hintUsedOnStep, phase, showHint, stepIdx]);
