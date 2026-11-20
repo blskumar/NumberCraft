@@ -1,0 +1,8 @@
+{
+  "name": "Numbercraft",
+  "description": "Tactile mathematics and probability game studio for students aged 8 to 16 featuring Basic Arithmetic, Modular Probability, and Strategy-Based Number Theory.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
