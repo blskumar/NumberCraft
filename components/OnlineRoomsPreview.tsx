@@ -229,7 +229,7 @@ export default function OnlineRoomsPreview({
                     placeholder="K7M-4QP"
                     value={joinInput}
                     onChange={(e) => setJoinInput(e.target.value.toUpperCase())}
-                    className="flex-1 rounded-lg border border-[#D8D1C4] bg-white px-3.5 py-2.5 font-mono text-base tracking-widest text-[#1C232B] uppercase focus:border-[#1D4ED8] focus:outline-none"
+                    className="min-w-0 flex-1 rounded-lg border border-[#D8D1C4] bg-white px-3.5 py-2.5 font-mono text-base tracking-widest text-[#1C232B] uppercase focus:border-[#1D4ED8] focus:outline-none"
                   />
                   <button
                     type="submit"

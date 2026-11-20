@@ -304,6 +304,7 @@ export default function NumbercraftApp() {
   // Hydrate local profile, guest trial usage, match ledger, daily history, and latched Mastery Seals once on mount
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      try {
       const loadedProfile = loadProfile();
       const loadedMatches = loadMatches();
       const loadedBadges = loadEarnedBadges();
@@ -341,7 +342,11 @@ export default function NumbercraftApp() {
       setEarnedBadges(reconciled.earnedRecords);
       setDailyCompletions(loadedDaily);
       setStoredGuestTrials(loadedGuestTrials);
-      setHydrated(true);
+      } catch {
+        // Unexpected stored data: fall back to defaults instead of hanging.
+      } finally {
+        setHydrated(true);
+      }
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);

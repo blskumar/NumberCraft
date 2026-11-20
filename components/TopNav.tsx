@@ -113,7 +113,7 @@ export default function TopNav({
         {/* Zone 2: Clean single-line text navigation links */}
         <nav
           aria-label="Primary navigation"
-          className="hidden md:flex items-center gap-6 text-sm font-medium"
+          className="hidden lg:flex items-center gap-6 text-sm font-medium"
         >
           {NAV_ITEMS.map((item) => {
             const active =
@@ -144,7 +144,7 @@ export default function TopNav({
         </nav>
 
         {/* Zone 3: Compact Theme Mode Cycle + Profile Action */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex min-w-0 items-center gap-2">
           <Tooltip
             content={`Theme: ${getThemeLabel(themePreference)} mode — click to switch to ${getThemeLabel(nextTheme)}`}
             placement="bottom"
@@ -173,7 +173,7 @@ export default function TopNav({
               data-testid="topnav-profile-button"
               onClick={onOpenAccount}
               aria-label="Open student profile and mastery seals"
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-lg border border-[#D8D1C4] bg-white px-2.5 sm:px-3.5 py-2 text-xs font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-lg border border-[#D8D1C4] bg-white px-2.5 sm:px-3.5 py-2 text-xs font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors whitespace-nowrap min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
             >
               {earnedSealCount > 0 ? (
                 <motion.span
@@ -191,7 +191,7 @@ export default function TopNav({
               ) : (
                 <User className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               )}
-              <span className="max-w-[116px] sm:max-w-[180px] truncate">
+              <span className="max-w-[88px] sm:max-w-[180px] truncate">
                 {accountLabel}
               </span>
             </button>
@@ -202,7 +202,7 @@ export default function TopNav({
       {/* Compact mobile navigation row */}
       <nav
         aria-label="Mobile navigation"
-        className="flex md:hidden items-center justify-between gap-1 overflow-x-auto border-t border-[#ECE7DD] bg-[#FAF8F4] px-2 py-1.5 text-xs font-medium"
+        className="flex lg:hidden items-center justify-between gap-1 overflow-x-auto border-t border-[#ECE7DD] bg-[#FAF8F4] px-2 py-1.5 text-xs font-medium"
       >
         {NAV_ITEMS.map((item) => {
           const active =

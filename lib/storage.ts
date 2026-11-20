@@ -122,15 +122,52 @@ export function clearAllLocalProgress(): void {
   }
 }
 
+const TIERS = ['explorers', 'challengers', 'strategists'];
+const MODES = ['solo', 'vs-ai', 'local'];
+const RESULTS = ['win', 'loss', 'draw'];
+
+function isValidMatchRecord(m: unknown): m is MatchRecord {
+  if (!m || typeof m !== 'object') return false;
+  const r = m as Record<string, unknown>;
+  return (
+    typeof r.id === 'string' &&
+    typeof r.playedAt === 'string' &&
+    typeof r.playerScore === 'number' &&
+    typeof r.opponentScore === 'number' &&
+    typeof r.primesClaimed === 'number' &&
+    typeof r.tier === 'string' && TIERS.includes(r.tier) &&
+    typeof r.mode === 'string' && MODES.includes(r.mode) &&
+    typeof r.result === 'string' && RESULTS.includes(r.result)
+  );
+}
+
+function isValidDailyCompletion(c: unknown): c is DailyChallengeCompletion {
+  if (!c || typeof c !== 'object') return false;
+  const r = c as Record<string, unknown>;
+  return (
+    typeof r.dateKey === 'string' &&
+    typeof r.editionNumber === 'number' &&
+    typeof r.solved === 'boolean' &&
+    typeof r.secondsUsed === 'number' &&
+    typeof r.timeLimitSeconds === 'number' &&
+    typeof r.mistakes === 'number' &&
+    typeof r.hintsUsed === 'number' &&
+    typeof r.score === 'number' &&
+    typeof r.completedAt === 'string' &&
+    typeof r.tier === 'string' && TIERS.includes(r.tier)
+  );
+}
+
 export function loadMatches(): MatchRecord[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = window.localStorage.getItem(MATCHES_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? (parsed as MatchRecord[]).slice(0, MAX_STORED_MATCHES)
-      : [];
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as unknown[])
+      .filter(isValidMatchRecord)
+      .slice(0, MAX_STORED_MATCHES);
   } catch {
     return [];
   }
@@ -208,14 +245,8 @@ export function loadDailyCompletions(): DailyChallengeCompletion[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return (parsed as DailyChallengeCompletion[])
-      .filter(
-        (item) =>
-          item &&
-          typeof item === 'object' &&
-          typeof item.dateKey === 'string' &&
-          typeof item.editionNumber === 'number'
-      )
+    return (parsed as unknown[])
+      .filter(isValidDailyCompletion)
       .slice(0, MAX_STORED_DAILY);
   } catch {
     return [];
