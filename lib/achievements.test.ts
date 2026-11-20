@@ -6,6 +6,7 @@ import {
   getBoardBaseSum,
   getMasterySealProgressPercent,
   getTopScorerThreshold,
+  shouldTriggerMasteryUnlockPulse,
 } from './achievements';
 import { createSampleMatches } from './notebook-analytics';
 import type { EarnedBadgeRecord, MatchRecord } from './types';
@@ -171,4 +172,80 @@ test('getMasterySealProgressPercent calculates clamped percentage progress accur
   assert.equal(getMasterySealProgressPercent(15, 12), 100);
   assert.equal(getMasterySealProgressPercent(-2, 12), 0);
   assert.equal(getMasterySealProgressPercent(3, 0), 0);
+});
+
+test('shouldTriggerMasteryUnlockPulse suppresses hydration/reset and fires on new badge unlocks', () => {
+  // Never triggers before hydration or baseline capture
+  assert.equal(
+    shouldTriggerMasteryUnlockPulse({
+      isHydrated: false,
+      hasBaseline: false,
+      prevEarnedCount: 0,
+      nextEarnedCount: 3,
+      prevEventKey: 0,
+      nextEventKey: 0,
+    }),
+    false
+  );
+  assert.equal(
+    shouldTriggerMasteryUnlockPulse({
+      isHydrated: true,
+      hasBaseline: false,
+      prevEarnedCount: 0,
+      nextEarnedCount: 2,
+      prevEventKey: 0,
+      nextEventKey: 0,
+    }),
+    false
+  );
+
+  // Fires when earnedCount rises after baseline
+  assert.equal(
+    shouldTriggerMasteryUnlockPulse({
+      isHydrated: true,
+      hasBaseline: true,
+      prevEarnedCount: 1,
+      nextEarnedCount: 2,
+      prevEventKey: 0,
+      nextEventKey: 0,
+    }),
+    true
+  );
+
+  // Fires when explicit unlockEventKey increments
+  assert.equal(
+    shouldTriggerMasteryUnlockPulse({
+      isHydrated: true,
+      hasBaseline: true,
+      prevEarnedCount: 4,
+      nextEarnedCount: 4,
+      prevEventKey: 1,
+      nextEventKey: 2,
+    }),
+    true
+  );
+
+  // Does not fire when unchanged or when clearing sample progress reduces count
+  assert.equal(
+    shouldTriggerMasteryUnlockPulse({
+      isHydrated: true,
+      hasBaseline: true,
+      prevEarnedCount: 4,
+      nextEarnedCount: 4,
+      prevEventKey: 2,
+      nextEventKey: 2,
+    }),
+    false
+  );
+  assert.equal(
+    shouldTriggerMasteryUnlockPulse({
+      isHydrated: true,
+      hasBaseline: true,
+      prevEarnedCount: 4,
+      nextEarnedCount: 0,
+      prevEventKey: 2,
+      nextEventKey: 2,
+    }),
+    false
+  );
 });

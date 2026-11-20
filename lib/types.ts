@@ -176,16 +176,18 @@ export interface EarnedBadgeRecord {
   triggerMatchId?: string;
 }
 
-export type AuthProviderKind = 'guest' | 'google' | 'email';
+export type AuthProviderKind = 'guest' | 'email';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 
 export interface StudentProfile {
+  uid?: string | null;
   displayName: string;
   ageTier: AgeTier;
   soundEnabled: boolean;
   themePreference?: ThemePreference;
-  sessionKind: 'guest' | 'signed-in-preview';
+  dailyProblemGoal?: number;
+  sessionKind: 'guest' | 'authenticated';
   authProvider?: AuthProviderKind;
   email?: string | null;
   sharedDeviceMode?: boolean;

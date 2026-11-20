@@ -94,7 +94,7 @@ export default function DailyGoalRing({
             </p>
             <h2 className="mt-0.5 font-display text-lg font-semibold text-[#1C232B]">
               {progress.goalMetToday
-                ? 'Today’s 10-Problem Target Reached'
+                ? `Today’s ${progress.dailyProblemGoal}-Problem Target Reached`
                 : `${progress.problemsRemaining} more ${progress.problemsRemaining === 1 ? 'problem' : 'problems'} to complete today’s goal`}
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-[#5A6572]">

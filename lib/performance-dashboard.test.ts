@@ -5,10 +5,12 @@ import {
   buildArithmeticGameBreakdown,
   buildChallengeCompletionHistory,
   buildDailyChallenge30DayFrequency,
+  buildDailyGoalCompletionRate30Day,
   buildDailyScoreSpeedSeries,
   buildDailyStreakDurationSeries,
   computeDashboardOverview,
   createSampleDashboardData,
+  detectStreakGrowthEvent,
   isSampleDailyCompletion,
 } from './performance-dashboard';
 
@@ -174,5 +176,189 @@ test('buildDailyStreakDurationSeries tracks streak duration over time and highli
   assert.equal(emptyTrend.points.length, 14);
   assert.equal(emptyTrend.peakStreakDuration, 0);
   assert.equal(emptyTrend.peakPeriods.length, 0);
+  assert.equal(emptyTrend.milestoneDays.length, 0);
+  assert.equal(emptyTrend.nextMilestoneTarget?.streakDay, 3);
   assert.equal(emptyTrend.currentStreakDuration, 0);
+});
+
+test('buildDailyStreakDurationSeries flags Mastery Milestone days at 3d, 7d, 14d, and 30d and tracks next target', () => {
+  const { sampleDaily } = createSampleDashboardData('2026-11-19');
+  const sampleTrend = buildDailyStreakDurationSeries(sampleDaily, '2026-11-19', 30);
+
+  // Sample reaches a 3-day streak on today (2026-11-19) -> Three-Day Scholar milestone
+  assert.equal(sampleTrend.milestoneDays.length, 1);
+  assert.equal(sampleTrend.milestoneDays[0].dateKey, '2026-11-19');
+  assert.equal(sampleTrend.milestoneDays[0].isMasteryMilestone, true);
+  assert.equal(sampleTrend.milestoneDays[0].milestone?.title, 'Three-Day Scholar');
+  assert.equal(sampleTrend.nextMilestoneTarget?.streakDay, 7);
+
+  // Build an 8-day continuous streak ending 2026-11-19 -> hits both 3d and 7d milestones
+  const eightDayCompletions = Array.from({ length: 8 }, (_, idx) => {
+    const day = 12 + idx;
+    const dk = `2026-11-${String(day).padStart(2, '0')}`;
+    return {
+      dateKey: dk,
+      editionNumber: 400 + idx,
+      tier: 'challengers' as const,
+      archetype: 'equation-vault' as const,
+      archetypeTitle: 'Equation Vault',
+      solved: true,
+      stepsSolved: 3,
+      secondsUsed: 35,
+      timeLimitSeconds: 90,
+      mistakes: 0,
+      hintsUsed: 0,
+      score: 265,
+      streakDays: idx + 1,
+      completedAt: `${dk}T15:00:00.000Z`,
+    };
+  });
+
+  const eightDayTrend = buildDailyStreakDurationSeries(
+    eightDayCompletions,
+    '2026-11-19',
+    14
+  );
+  assert.equal(eightDayTrend.milestoneDays.length, 2);
+  assert.equal(eightDayTrend.milestoneDays[0].streakLength, 3);
+  assert.equal(eightDayTrend.milestoneDays[0].milestone?.title, 'Three-Day Scholar');
+  assert.equal(eightDayTrend.milestoneDays[1].streakLength, 7);
+  assert.equal(eightDayTrend.milestoneDays[1].milestone?.title, 'Weekly Tactician');
+  assert.equal(eightDayTrend.nextMilestoneTarget?.streakDay, 14);
+});
+
+test('detectStreakGrowthEvent triggers cleanly on new milestones, consecutive streak gains, and daily goal successes', () => {
+  const empty = {
+    currentStreakDuration: 0,
+    milestoneCount: 0,
+    dailyGoalMetToday: false,
+    dailyMilestoneCompletedToday: false,
+  };
+
+  // No growth when remaining empty
+  assert.equal(detectStreakGrowthEvent(null, empty).triggered, false);
+  assert.equal(detectStreakGrowthEvent(empty, empty).triggered, false);
+
+  // Mastery milestone jump triggers mastery-milestone highlight
+  const milestoneEvent = detectStreakGrowthEvent(empty, {
+    currentStreakDuration: 3,
+    milestoneCount: 1,
+    dailyGoalMetToday: true,
+    dailyMilestoneCompletedToday: false,
+  });
+  assert.equal(milestoneEvent.triggered, true);
+  assert.equal(milestoneEvent.reason, 'mastery-milestone');
+
+  // Consecutive streak growth (1 -> 2) triggers consecutive-streak highlight
+  const streakGain = detectStreakGrowthEvent(
+    {
+      currentStreakDuration: 1,
+      milestoneCount: 0,
+      dailyGoalMetToday: false,
+      dailyMilestoneCompletedToday: false,
+    },
+    {
+      currentStreakDuration: 2,
+      milestoneCount: 0,
+      dailyGoalMetToday: false,
+      dailyMilestoneCompletedToday: false,
+    }
+  );
+  assert.equal(streakGain.triggered, true);
+  assert.equal(streakGain.reason, 'consecutive-streak');
+
+  // Daily goal met flip triggers daily-goal-success highlight
+  const goalHit = detectStreakGrowthEvent(
+    {
+      currentStreakDuration: 1,
+      milestoneCount: 0,
+      dailyGoalMetToday: false,
+      dailyMilestoneCompletedToday: false,
+    },
+    {
+      currentStreakDuration: 1,
+      milestoneCount: 0,
+      dailyGoalMetToday: true,
+      dailyMilestoneCompletedToday: false,
+    }
+  );
+  assert.equal(goalHit.triggered, true);
+  assert.equal(goalHit.reason, 'daily-goal-success');
+
+  // Daily Milestone arena completion triggers daily-milestone-arena highlight
+  const arenaHit = detectStreakGrowthEvent(empty, {
+    currentStreakDuration: 0,
+    milestoneCount: 0,
+    dailyGoalMetToday: false,
+    dailyMilestoneCompletedToday: true,
+  });
+  assert.equal(arenaHit.triggered, true);
+  assert.equal(arenaHit.reason, 'daily-milestone-arena');
+
+  // Decreasing or unchanged state does not re-trigger
+  const unchanged = detectStreakGrowthEvent(
+    {
+      currentStreakDuration: 3,
+      milestoneCount: 1,
+      dailyGoalMetToday: true,
+      dailyMilestoneCompletedToday: true,
+    },
+    {
+      currentStreakDuration: 3,
+      milestoneCount: 1,
+      dailyGoalMetToday: true,
+      dailyMilestoneCompletedToday: true,
+    }
+  );
+  assert.equal(unchanged.triggered, false);
+});
+
+test('buildDailyGoalCompletionRate30Day calculates 30-day rates, partial steps, 7-day rolling rate, and 6-day blocks from dailyCompletions', () => {
+  const { sampleDaily } = createSampleDashboardData('2026-11-20');
+  const withPartial = [
+    ...sampleDaily,
+    {
+      dateKey: '2026-11-15',
+      editionNumber: 120,
+      tier: 'challengers' as const,
+      archetype: 'equation-vault' as const,
+      archetypeTitle: 'Equation Vault',
+      solved: false,
+      stepsSolved: 2,
+      secondsUsed: 90,
+      timeLimitSeconds: 90,
+      mistakes: 2,
+      hintsUsed: 1,
+      score: 64,
+      completedAt: '2026-11-15T12:00:00.000Z',
+    },
+  ];
+
+  const rateData = buildDailyGoalCompletionRate30Day(withPartial, '2026-11-20');
+  assert.equal(rateData.points.length, 30);
+  assert.equal(rateData.periodBuckets.length, 5);
+  assert.equal(rateData.daysMet, 6);
+  assert.equal(rateData.partialDays, 1);
+  assert.equal(rateData.missedDays, 23);
+  assert.equal(rateData.overallCompletionRatePercent, 20); // 6 / 30 = 20%
+  assert.equal(rateData.last7DaysRatePercent, 43); // 3 solved in last 7 days = 42.85 -> 43%
+
+  const partialPt = rateData.points.find((p) => p.dateKey === '2026-11-15');
+  assert.ok(partialPt);
+  assert.equal(partialPt.status, 'partial');
+  assert.equal(partialPt.completionRatePercent, 67); // 2 / 3 -> 67%
+
+  const todayPt = rateData.points[rateData.points.length - 1];
+  assert.equal(todayPt.dateKey, '2026-11-20');
+  assert.equal(todayPt.isToday, true);
+  assert.equal(todayPt.status, 'met');
+  assert.equal(todayPt.completionRatePercent, 100);
+  assert.equal(todayPt.rolling7DayRatePercent, 43);
+
+  // Empty completions produce clean 0% baseline across all 30 days
+  const emptyData = buildDailyGoalCompletionRate30Day([], '2026-11-20');
+  assert.equal(emptyData.points.length, 30);
+  assert.equal(emptyData.daysMet, 0);
+  assert.equal(emptyData.overallCompletionRatePercent, 0);
+  assert.equal(emptyData.last7DaysRatePercent, 0);
 });

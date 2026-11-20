@@ -1,0 +1,162 @@
+{
+  "entities": {
+    "UserProfileDoc": {
+      "title": "UserProfileDoc",
+      "description": "Private student account profile and learning preferences scoped strictly to the authenticated owner.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the account owner."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 28,
+          "description": "Student public display name shown on leaderboards."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 120,
+          "description": "Private registered email address (isolated to owner-only reads)."
+        },
+        "ageTier": {
+          "type": "string",
+          "enum": ["explorers", "challengers", "strategists"],
+          "description": "Preferred adaptive difficulty tier."
+        },
+        "dailyProblemGoal": {
+          "type": "integer",
+          "description": "Custom daily solved problem target (5 to 100)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the account profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest profile update."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "email",
+        "ageTier",
+        "dailyProblemGoal",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GameScoreDoc": {
+      "title": "GameScoreDoc",
+      "description": "Immutable per-game score record submitted by a signed-in player for Top 10 Daily and Weekly Leaderboards (contains zero PII).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the player who earned this score."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 28,
+          "description": "Public player display name at the time of the match."
+        },
+        "gameId": {
+          "type": "string",
+          "enum": [
+            "addition-attack",
+            "subtraction-sprint",
+            "multiplication-mastery",
+            "equation-foundry",
+            "odds-urns",
+            "factor-grid",
+            "daily-challenge"
+          ],
+          "description": "Canonical identifier of the game played."
+        },
+        "gameTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48,
+          "description": "Human-readable title of the game."
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["explorers", "challengers", "strategists"],
+          "description": "Adaptive age tier played during the match."
+        },
+        "score": {
+          "type": "integer",
+          "description": "Numeric score achieved (0 to 100000)."
+        },
+        "accuracyPercent": {
+          "type": "integer",
+          "description": "Rounded accuracy or completion percentage (0 to 100)."
+        },
+        "dateKey": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Local calendar date key (YYYY-MM-DD) for Top 10 Daily Leaderboards."
+        },
+        "weekKey": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4}-W[0-9]{2}$",
+          "description": "ISO week key (YYYY-Www) for Top 10 Weekly Leaderboards."
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"],
+          "description": "Explicit leaderboard visibility marker enforced by Firestore list rules."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the score was recorded."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "gameId",
+        "gameTitle",
+        "tier",
+        "score",
+        "accuracyPercent",
+        "dateKey",
+        "weekKey",
+        "visibility",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfileDoc"
+      },
+      "description": "Owner-only private user profile document storing registered email, display name, tier, and daily problem goal."
+    },
+    "/gameScores/{scoreId}": {
+      "schema": {
+        "$ref": "#/entities/GameScoreDoc"
+      },
+      "description": "Immutable per-game score submissions used to power Top 10 Daily and Top 10 Weekly Leaderboards across signed-in players."
+    }
+  }
+}

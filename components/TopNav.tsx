@@ -86,9 +86,9 @@ export default function TopNav({
   const accountLabel =
     earnedSealCount > 0
       ? `${profile.displayName} · ${earnedSealCount} ${earnedSealCount === 1 ? 'Seal' : 'Seals'}`
-      : profile.sessionKind === 'signed-in-preview'
+      : profile.sessionKind === 'authenticated'
         ? profile.displayName
-        : `${profile.displayName} · Sign In`;
+        : 'Sign In / Register';
 
   const ThemeIcon =
     themePreference === 'dark'

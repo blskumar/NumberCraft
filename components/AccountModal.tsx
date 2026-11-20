@@ -4,9 +4,13 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowRight,
+  Check,
+  Copy,
+  ExternalLink,
   Eye,
   EyeOff,
   KeyRound,
+  Loader2,
   Lock,
   LogIn,
   LogOut,
@@ -26,7 +30,18 @@ import {
   getAchievementById,
   type AchievementEvaluation,
 } from '@/lib/achievements';
+import { DAILY_PROBLEM_GOAL } from '@/lib/daily-goal';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
+import {
+  FIREBASE_AUTH_PROVIDERS_CONSOLE_URL,
+  formatFirebaseAuthError,
+  isEmailPasswordProviderDisabledError,
+  registerWithEmail,
+  sendAccountPasswordReset,
+  signInWithEmail,
+  signOutAccount,
+  upsertUserProfileDoc,
+} from '@/lib/firebase';
 import { playSoundPreviewChime } from '@/lib/sound';
 import type {
   AchievementId,
@@ -35,9 +50,15 @@ import type {
   ThemePreference,
 } from '@/lib/types';
 
+export type AccountModalSection = 'profile' | 'auth';
+export type AccountAuthMode = 'signin' | 'signup' | 'recovery';
+
 interface AccountModalProps {
   open: boolean;
   onClose: () => void;
+  initialSection?: AccountModalSection;
+  initialAuthMode?: AccountAuthMode;
+  registrationGateGameTitle?: string | null;
   profile: StudentProfile;
   matchCount: number;
   achievementEvaluation: AchievementEvaluation;
@@ -48,9 +69,6 @@ interface AccountModalProps {
   onClearLocalProgress: () => void;
   onOpenNotebook: () => void;
 }
-
-type ModalSection = 'profile' | 'auth';
-type AuthMode = 'signin' | 'signup' | 'recovery';
 
 function evaluatePasswordStrength(pw: string): {
   score: number;
@@ -76,6 +94,9 @@ function evaluatePasswordStrength(pw: string): {
 
 function AccountModalBody({
   onClose,
+  initialSection = 'profile',
+  initialAuthMode = 'signin',
+  registrationGateGameTitle = null,
   profile,
   matchCount,
   achievementEvaluation,
@@ -86,14 +107,23 @@ function AccountModalBody({
   onClearLocalProgress,
   onOpenNotebook,
 }: Omit<AccountModalProps, 'open'>) {
-  // Mounted fresh each time modal opens so hydrated localStorage displayName is never stale (G2)
-  const [section, setSection] = useState<ModalSection>('profile');
-  const [authMode, setAuthMode] = useState<AuthMode>('signin');
+  const isAuthenticated =
+    profile.sessionKind === 'authenticated' && Boolean(profile.uid);
+
+  const [section, setSection] = useState<AccountModalSection>(
+    registrationGateGameTitle && !isAuthenticated ? 'auth' : initialSection
+  );
+  const [authMode, setAuthMode] = useState<AccountAuthMode>(
+    registrationGateGameTitle && !isAuthenticated ? 'signup' : initialAuthMode
+  );
   const [nameInput, setNameInput] = useState(profile.displayName);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [providerSetupRequired, setProviderSetupRequired] = useState(false);
+  const [copiedConsoleUrl, setCopiedConsoleUrl] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Interactive Auth Flow prototype fields
+  // Email & Password authentication fields
   const [emailInput, setEmailInput] = useState(profile.email ?? '');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -101,7 +131,6 @@ function AccountModalBody({
     profile.displayName === 'Guest Explorer' ? '' : profile.displayName
   );
   const [signupTier, setSignupTier] = useState<AgeTier>(profile.ageTier);
-  const [guardianConsent, setGuardianConsent] = useState(false);
   const [sharedDevice, setSharedDevice] = useState(
     Boolean(profile.sharedDeviceMode)
   );
@@ -132,7 +161,7 @@ function AccountModalBody({
 
   const pwStrength = evaluatePasswordStrength(passwordInput);
 
-  function handleSaveName(e: React.FormEvent) {
+  async function handleSaveName(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
     const cleaned = nameInput.trim();
@@ -140,8 +169,26 @@ function AccountModalBody({
       setErrorMessage('Please enter a display name (at least 1 character).');
       return;
     }
-    onUpdateProfile({ ...profile, displayName: cleaned.slice(0, 28) });
-    setStatusMessage('Display name updated and saved locally.');
+    const nextName = cleaned.slice(0, 28);
+    const updated: StudentProfile = { ...profile, displayName: nextName };
+    onUpdateProfile(updated);
+
+    if (isAuthenticated && profile.uid && profile.email) {
+      try {
+        await upsertUserProfileDoc({
+          uid: profile.uid,
+          displayName: nextName,
+          email: profile.email,
+          ageTier: updated.ageTier,
+          dailyProblemGoal: updated.dailyProblemGoal ?? DAILY_PROBLEM_GOAL,
+        });
+        setStatusMessage('Display name updated and synced to your account.');
+      } catch {
+        setStatusMessage('Display name saved locally.');
+      }
+    } else {
+      setStatusMessage('Display name updated and saved locally.');
+    }
   }
 
   function handlePinSeal(id: AchievementId) {
@@ -157,70 +204,69 @@ function AccountModalBody({
     );
   }
 
-  function handleGoogleSignInPreview() {
-    setErrorMessage(null);
-    const cleaned = nameInput.trim() || profile.displayName;
-    const nextName = cleaned === 'Guest Explorer' ? 'Maya Chen' : cleaned;
-    onUpdateProfile({
-      ...profile,
-      displayName: nextName,
-      sessionKind: 'signed-in-preview',
-      authProvider: 'google',
-      email: 'maya.student@example.edu',
-      sharedDeviceMode: sharedDevice,
-    });
-    setNameInput(nextName);
-    setSection('profile');
-    setStatusMessage(
-      `Google Sign-In UX preview active. ${matchCount} local ${matchCount === 1 ? 'match' : 'matches'} and ${achievementEvaluation.earnedCount} latched seals ready for per-account cloud sync.`
-    );
-  }
-
-  function handleEmailSignIn(e: React.FormEvent) {
+  async function handleEmailSignIn(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
+    setProviderSetupRequired(false);
+    setStatusMessage(null);
     const cleanedEmail = emailInput.trim().toLowerCase();
     if (!cleanedEmail || !cleanedEmail.includes('@')) {
-      setErrorMessage('Enter a valid email address to continue.');
+      setErrorMessage('Enter a valid email address to sign in.');
       return;
     }
-    if (passwordInput.length < 8) {
-      setErrorMessage(
-        'Invalid email or password. Passwords must be at least 8 characters.'
+    if (passwordInput.length < 6) {
+      setErrorMessage('Enter your password (at least 6 characters).');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const user = await signInWithEmail({
+        email: cleanedEmail,
+        password: passwordInput,
+        sharedDevice,
+      });
+      const resolvedName =
+        user.displayName?.trim() ||
+        (profile.displayName !== 'Guest Explorer'
+          ? profile.displayName
+          : cleanedEmail.split('@')[0].slice(0, 20));
+      onUpdateProfile({
+        ...profile,
+        uid: user.uid,
+        displayName: resolvedName.slice(0, 28),
+        sessionKind: 'authenticated',
+        authProvider: 'email',
+        email: user.email ?? cleanedEmail,
+        sharedDeviceMode: sharedDevice,
+      });
+      setNameInput(resolvedName.slice(0, 28));
+      setPasswordInput('');
+      setSection('profile');
+      setStatusMessage(
+        'Signed in! Unlimited levels unlocked and your per-game scores will save to the Daily & Weekly Top 10 Leaderboards.'
       );
-      return;
+    } catch (err) {
+      setProviderSetupRequired(isEmailPasswordProviderDisabledError(err));
+      setErrorMessage(formatFirebaseAuthError(err));
+    } finally {
+      setIsSubmitting(false);
     }
-    const inferredName =
-      profile.displayName !== 'Guest Explorer'
-        ? profile.displayName
-        : cleanedEmail.split('@')[0].slice(0, 20);
-    onUpdateProfile({
-      ...profile,
-      displayName: inferredName,
-      sessionKind: 'signed-in-preview',
-      authProvider: 'email',
-      email: cleanedEmail,
-      sharedDeviceMode: sharedDevice,
-    });
-    setNameInput(inferredName);
-    setPasswordInput('');
-    setSection('profile');
-    setStatusMessage(
-      `Signed-in preview active via Email/Password (${sharedDevice ? 'Session-only classroom mode' : 'Remembered on this device'}).`
-    );
   }
 
-  function handleEmailSignUp(e: React.FormEvent) {
+  async function handleEmailSignUp(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
+    setProviderSetupRequired(false);
+    setStatusMessage(null);
     const cleanedName = signupName.trim();
     const cleanedEmail = emailInput.trim().toLowerCase();
     if (!cleanedName) {
-      setErrorMessage('Choose a student display name (pseudonyms welcome).');
+      setErrorMessage('Choose a display name (pseudonyms welcome).');
       return;
     }
     if (!cleanedEmail || !cleanedEmail.includes('@')) {
-      setErrorMessage('Enter a valid student or parent email address.');
+      setErrorMessage('Enter any valid email address to register for free.');
       return;
     }
     if (pwStrength.score < 3) {
@@ -229,65 +275,95 @@ function AccountModalBody({
       );
       return;
     }
-    if (signupTier === 'explorers' && !guardianConsent) {
-      setErrorMessage(
-        'Parent or guardian consent is required to create an Explorers (8–10) account.'
-      );
-      return;
-    }
 
-    onUpdateProfile({
-      ...profile,
-      displayName: cleanedName.slice(0, 28),
-      ageTier: signupTier,
-      sessionKind: 'signed-in-preview',
-      authProvider: 'email',
-      email: cleanedEmail,
-      sharedDeviceMode: sharedDevice,
-    });
-    setNameInput(cleanedName.slice(0, 28));
-    setPasswordInput('');
-    setSection('profile');
-    setStatusMessage(
-      `Account created (UX preview). ${matchCount} local guest ${matchCount === 1 ? 'match' : 'matches'} merged without exposing your email publicly.`
-    );
+    setIsSubmitting(true);
+    try {
+      const user = await registerWithEmail({
+        email: cleanedEmail,
+        password: passwordInput,
+        displayName: cleanedName,
+        ageTier: signupTier,
+        dailyProblemGoal: profile.dailyProblemGoal ?? DAILY_PROBLEM_GOAL,
+        sharedDevice,
+      });
+      onUpdateProfile({
+        ...profile,
+        uid: user.uid,
+        displayName: cleanedName.slice(0, 28),
+        ageTier: signupTier,
+        sessionKind: 'authenticated',
+        authProvider: 'email',
+        email: user.email ?? cleanedEmail,
+        sharedDeviceMode: sharedDevice,
+      });
+      setNameInput(cleanedName.slice(0, 28));
+      setPasswordInput('');
+      setSection('profile');
+      setStatusMessage(
+        'Free account created! Unlimited levels unlocked across all 7 games, and your future scores will automatically post to the Daily & Weekly Top 10 Leaderboards.'
+      );
+    } catch (err) {
+      setProviderSetupRequired(isEmailPasswordProviderDisabledError(err));
+      setErrorMessage(formatFirebaseAuthError(err));
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  function handlePasswordRecovery(e: React.FormEvent) {
+  async function handlePasswordRecovery(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
+    setStatusMessage(null);
     const cleanedEmail = emailInput.trim().toLowerCase();
     if (!cleanedEmail || !cleanedEmail.includes('@')) {
       setErrorMessage('Enter the email address associated with your account.');
       return;
     }
-    setStatusMessage(
-      `If an account exists for ${cleanedEmail}, a single-use password reset link (valid 15 minutes) has been prepared. Active sessions revoke automatically on reset.`
-    );
+
+    setIsSubmitting(true);
+    try {
+      await sendAccountPasswordReset(cleanedEmail);
+      setStatusMessage(
+        `If an account exists for ${cleanedEmail}, a password reset link has been sent to that inbox.`
+      );
+    } catch (err) {
+      setErrorMessage(formatFirebaseAuthError(err));
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  function handleConfirmSignOut() {
+  async function handleConfirmSignOut() {
     setErrorMessage(null);
-    if (wipeSharedOnSignOut) {
-      onClearLocalProgress();
+    setIsSubmitting(true);
+    try {
+      await signOutAccount();
+      if (wipeSharedOnSignOut) {
+        onClearLocalProgress();
+      }
+      onUpdateProfile({
+        ...profile,
+        uid: null,
+        displayName: 'Guest Explorer',
+        sessionKind: 'guest',
+        authProvider: 'guest',
+        email: null,
+        sharedDeviceMode: false,
+        featuredBadgeId: wipeSharedOnSignOut ? null : profile.featuredBadgeId,
+      });
+      setNameInput('Guest Explorer');
+      setConfirmSignOut(false);
+      setWipeSharedOnSignOut(false);
+      setStatusMessage(
+        wipeSharedOnSignOut
+          ? 'Signed out securely and cleared cached local progress for the next student.'
+          : 'Signed out securely. You are now back in Guest Mode.'
+      );
+    } catch (err) {
+      setErrorMessage(formatFirebaseAuthError(err));
+    } finally {
+      setIsSubmitting(false);
     }
-    onUpdateProfile({
-      ...profile,
-      displayName: 'Guest Explorer',
-      sessionKind: 'guest',
-      authProvider: 'guest',
-      email: null,
-      sharedDeviceMode: false,
-      featuredBadgeId: wipeSharedOnSignOut ? null : profile.featuredBadgeId,
-    });
-    setNameInput('Guest Explorer');
-    setConfirmSignOut(false);
-    setWipeSharedOnSignOut(false);
-    setStatusMessage(
-      wipeSharedOnSignOut
-        ? 'Signed out securely and cleared cached local progress for the next classroom student.'
-        : 'Signed out securely. Cloud listeners detached cleanly; you remain in Guest Mode.'
-    );
   }
 
   return (
@@ -295,6 +371,7 @@ function AccountModalBody({
       role="dialog"
       aria-modal="true"
       aria-labelledby="account-modal-title"
+      data-testid="account-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -310,15 +387,17 @@ function AccountModalBody({
           <div>
             <p className="text-xs font-medium text-[#5A6572]">
               Student Session ·{' '}
-              {profile.sessionKind === 'signed-in-preview'
-                ? `Signed-In Preview (${profile.authProvider === 'email' ? 'Email' : 'Google'})`
-                : 'Guest Mode (Local Storage)'}
+              {isAuthenticated
+                ? 'Signed In (Email Account · Unlimited Access)'
+                : 'Free Guest Mode (1 Free Level per Game)'}
             </p>
             <h2
               id="account-modal-title"
               className="mt-1 font-display text-2xl font-semibold text-[#1C232B]"
             >
-              Profile &amp; Account Flow
+              {registrationGateGameTitle && !isAuthenticated
+                ? 'Free Account Required to Continue'
+                : 'Profile & Account'}
             </h2>
           </div>
           <button
@@ -331,7 +410,33 @@ function AccountModalBody({
           </button>
         </div>
 
-        {/* Section Switcher: Profile & Seals | Account Auth Flow */}
+        {/* Free Guest Trial Limit Callout Banner when triggered by 1-level gate */}
+        {registrationGateGameTitle && !isAuthenticated && (
+          <div
+            data-testid="guest-trial-gate-banner"
+            className="mt-4 rounded-xl border border-[#1D4ED8]/35 bg-[#EFF5FF] p-4 text-xs"
+          >
+            <div className="flex items-start gap-2.5">
+              <Sparkles
+                className="mt-0.5 h-4 w-4 shrink-0 text-[#1D4ED8]"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="font-semibold text-[#1C232B]">
+                  Free Trial Level Complete for {registrationGateGameTitle}
+                </p>
+                <p className="mt-1 leading-relaxed text-[#46515E]">
+                  Guest explorers can try 1 free level of every game. Create a{' '}
+                  <strong>100% free account</strong> with any email address (no
+                  payment or card required) to unlock unlimited levels and save
+                  scores to the Daily &amp; Weekly Top 10 Leaderboards.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section Switcher: Profile & Seals | Email Account */}
         <div
           role="tablist"
           aria-label="Account modal views"
@@ -356,6 +461,7 @@ function AccountModalBody({
           <button
             type="button"
             role="tab"
+            data-testid="account-tab-auth"
             aria-selected={section === 'auth'}
             onClick={() => {
               setSection('auth');
@@ -367,9 +473,7 @@ function AccountModalBody({
                 : 'text-[#5A6572] hover:text-[#1C232B]'
             }`}
           >
-            {profile.sessionKind === 'signed-in-preview'
-              ? 'Session & Security'
-              : 'Sign In / Sign Up'}
+            {isAuthenticated ? 'Account & Security' : 'Email Sign In / Register'}
           </button>
         </div>
 
@@ -553,7 +657,7 @@ function AccountModalBody({
                   htmlFor="student-display-name"
                   className="block text-xs font-semibold text-[#1C232B]"
                 >
-                  Display Name (Shown on Scoreboards &amp; Rooms)
+                  Display Name (Shown on Scoreboards &amp; Leaderboards)
                 </label>
                 <div className="mt-1.5 flex gap-2">
                   <input
@@ -644,12 +748,18 @@ function AccountModalBody({
                   <span className="inline-flex items-center gap-2">
                     {profile.soundEnabled ? (
                       <>
-                        <Volume2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <Volume2
+                          className="h-3.5 w-3.5 shrink-0"
+                          aria-hidden="true"
+                        />
                         Audio On
                       </>
                     ) : (
                       <>
-                        <VolumeX className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <VolumeX
+                          className="h-3.5 w-3.5 shrink-0"
+                          aria-hidden="true"
+                        />
                         Muted
                       </>
                     )}
@@ -662,17 +772,15 @@ function AccountModalBody({
                   >
                     <span
                       className={`inline-block h-3 w-3 rounded-full bg-white shadow-xs transition-transform ${
-                        profile.soundEnabled ? 'translate-x-3.5' : 'translate-x-0.5'
+                        profile.soundEnabled
+                          ? 'translate-x-3.5'
+                          : 'translate-x-0.5'
                       }`}
                     />
                   </span>
                 </button>
               </div>
             </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-[#5A6572]">
-              Synced globally across Core Arithmetic, Equation Foundry, Odds
-              &amp; Urns, Daily Challenge, and Factor Grid.
-            </p>
 
             {/* Appearance Mode: Light / Dark / System */}
             <div className="mt-5 border-t border-[#ECE7DD] pt-4">
@@ -717,7 +825,10 @@ function AccountModalBody({
                           : 'border-[#D8D1C4] bg-[#FAF8F4] text-[#5A6572] hover:border-[#1D4ED8] hover:text-[#1C232B]'
                       }`}
                     >
-                      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <Icon
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
                       <span>{label}</span>
                     </button>
                   );
@@ -725,19 +836,19 @@ function AccountModalBody({
               </div>
             </div>
 
-            {/* Quick Auth Status Card */}
+            {/* Quick Auth Status Card (Email-Only — Zero Google Login) */}
             <div className="mt-5 rounded-xl border border-[#E5E0D5] bg-[#FAF8F4] p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold text-[#1C232B]">
-                    {profile.sessionKind === 'signed-in-preview'
-                      ? 'Per-Account Progress Sync (Preview Active)'
-                      : 'Save Progress Across Devices (Auth UX Prototype)'}
+                    {isAuthenticated
+                      ? 'Email Account Active · Cloud Scores Enabled'
+                      : 'Free Email Registration · Unlimited Play & Top 10 Scores'}
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-[#5A6572]">
-                    {profile.sessionKind === 'signed-in-preview'
-                      ? `Signed in via ${profile.authProvider === 'email' ? 'Email/Password' : 'Google'} (${profile.email ?? 'private'}). Your email is never exposed on scoreboards.`
-                      : 'Students play immediately in Guest Mode. Sign in with Google or Email/Password to preview cross-device progress merge, recovery, and secure sign-out.'}
+                    {isAuthenticated
+                      ? `Signed in with ${profile.email ?? 'your email'}. Every game score saves automatically to the Daily & Weekly Top 10 Leaderboards. Your email stays strictly private.`
+                      : 'Guests can try 1 free level of each game. Register for free with any email address (no payment required) to unlock unlimited levels and save scores.'}
                   </p>
                 </div>
                 <ShieldCheck
@@ -747,25 +858,31 @@ function AccountModalBody({
               </div>
 
               <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3">
-                {profile.sessionKind === 'guest' ? (
+                {!isAuthenticated ? (
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
+                      data-testid="profile-open-register-btn"
                       onClick={() => {
-                        setAuthMode('signin');
+                        setAuthMode('signup');
                         setSection('auth');
                       }}
                       className="inline-flex items-center gap-2 rounded-lg bg-[#1D4ED8] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#1E40AF] transition-colors whitespace-nowrap"
                     >
-                      <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
-                      Sign In / Create Account
+                      <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                      Register Free with Email
                     </button>
                     <button
                       type="button"
-                      onClick={handleGoogleSignInPreview}
+                      data-testid="profile-open-signin-btn"
+                      onClick={() => {
+                        setAuthMode('signin');
+                        setSection('auth');
+                      }}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors whitespace-nowrap"
                     >
-                      Continue with Google
+                      <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+                      Sign In
                     </button>
                   </div>
                 ) : (
@@ -778,7 +895,7 @@ function AccountModalBody({
                     className="inline-flex items-center gap-2 rounded-lg border border-[#BE123C]/40 bg-white px-3.5 py-2 text-xs font-semibold text-[#BE123C] hover:bg-[#BE123C]/5 transition-colors whitespace-nowrap"
                   >
                     <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-                    Secure Sign-Out
+                    Sign Out
                   </button>
                 )}
 
@@ -794,32 +911,36 @@ function AccountModalBody({
           </>
         )}
 
-        {/* VIEW 2: AUTHENTICATION FLOW (SIGN IN / SIGN UP / PASSWORD RECOVERY / SECURE SIGN-OUT) */}
+        {/* VIEW 2: EMAIL AUTHENTICATION (SIGN IN / FREE REGISTRATION / RESET / SIGN-OUT) */}
         {section === 'auth' && (
           <div className="mt-4 space-y-4">
-            {profile.sessionKind === 'signed-in-preview' ? (
+            {isAuthenticated ? (
               <div className="rounded-xl border border-[#E5E0D5] bg-[#FAF8F4] p-4 space-y-4">
                 <div>
                   <p className="text-xs font-semibold text-[#047857]">
-                    Active Student Session (UX Preview)
+                    Active Student Account
                   </p>
                   <p className="mt-1 text-sm font-semibold text-[#1C232B]">
                     {profile.displayName}
                   </p>
                   <p className="font-mono text-xs text-[#5A6572]">
-                    Private Email: {profile.email ?? 'hidden'} · Provider:{' '}
-                    {profile.authProvider === 'email'
-                      ? 'Email & Password'
-                      : 'Google OAuth'}
+                    Private Email: {profile.email ?? 'hidden'} · Email &amp;
+                    Password
                   </p>
                 </div>
 
                 <dl className="space-y-1.5 border-y border-[#ECE7DD] py-3 text-xs text-[#46515E]">
                   <div className="flex justify-between">
-                    <dt>Account-Scoped Progress</dt>
+                    <dt>Saved Progress</dt>
                     <dd className="font-mono font-semibold text-[#1C232B] tabular-nums">
                       {matchCount} matches · {achievementEvaluation.earnedCount}{' '}
                       seals
+                    </dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt>Game Access &amp; Cloud Scores</dt>
+                    <dd className="font-semibold text-[#047857]">
+                      Unlimited Levels · Top 10 Leaderboards Active
                     </dd>
                   </div>
                   <div className="flex justify-between">
@@ -827,7 +948,7 @@ function AccountModalBody({
                     <dd className="font-semibold text-[#1C232B]">
                       {profile.sharedDeviceMode
                         ? 'Session-Only (Shared Classroom)'
-                        : 'Local Device Remembered'}
+                        : 'Remembered on This Device'}
                     </dd>
                   </div>
                 </dl>
@@ -847,8 +968,8 @@ function AccountModalBody({
                       Confirm Secure Sign-Out
                     </p>
                     <p className="text-xs leading-relaxed text-[#5A6572]">
-                      Signing out detaches active sync listeners and revokes the
-                      current session token.
+                      Signing out ends your authenticated session on this
+                      browser and returns to Guest Mode.
                     </p>
                     <label className="flex cursor-pointer items-start gap-2 text-xs text-[#1C232B]">
                       <input
@@ -867,10 +988,17 @@ function AccountModalBody({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
+                        disabled={isSubmitting}
                         data-testid="confirm-signout-btn"
                         onClick={handleConfirmSignOut}
-                        className="rounded-lg bg-[#BE123C] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#9F1239]"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#BE123C] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#9F1239] disabled:opacity-60"
                       >
+                        {isSubmitting && (
+                          <Loader2
+                            className="h-3.5 w-3.5 animate-spin"
+                            aria-hidden="true"
+                          />
+                        )}
                         Confirm Sign-Out
                       </button>
                       <button
@@ -886,12 +1014,12 @@ function AccountModalBody({
               </div>
             ) : (
               <>
-                {/* Auth Sub-Mode Switcher */}
+                {/* Auth Sub-Mode Switcher (Email Only) */}
                 <div className="flex items-center gap-2 border-b border-[#ECE7DD] pb-3 text-xs font-semibold">
                   {(
                     [
+                      { id: 'signup', label: 'Register Free', icon: UserPlus },
                       { id: 'signin', label: 'Sign In', icon: LogIn },
-                      { id: 'signup', label: 'Create Account', icon: UserPlus },
                       {
                         id: 'recovery',
                         label: 'Reset Password',
@@ -902,6 +1030,7 @@ function AccountModalBody({
                     <button
                       key={id}
                       type="button"
+                      data-testid={`auth-mode-${id}`}
                       onClick={() => {
                         setAuthMode(id);
                         setErrorMessage(null);
@@ -919,24 +1048,9 @@ function AccountModalBody({
                   ))}
                 </div>
 
-                {/* SIGN IN FORM */}
+                {/* SIGN IN FORM — EMAIL & PASSWORD ONLY */}
                 {authMode === 'signin' && (
                   <form onSubmit={handleEmailSignIn} className="space-y-3.5">
-                    <button
-                      type="button"
-                      onClick={handleGoogleSignInPreview}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#D8D1C4] bg-white py-2.5 text-xs font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors"
-                    >
-                      <LogIn className="h-4 w-4" aria-hidden="true" />
-                      Continue with Google (Popup Auth Preview)
-                    </button>
-
-                    <div className="flex items-center gap-3 text-[11px] text-[#7A8490]">
-                      <span className="h-px flex-1 bg-[#E5E0D5]" />
-                      <span>or sign in with email</span>
-                      <span className="h-px flex-1 bg-[#E5E0D5]" />
-                    </div>
-
                     <div>
                       <label
                         htmlFor="auth-signin-email"
@@ -955,7 +1069,7 @@ function AccountModalBody({
                           required
                           value={emailInput}
                           onChange={(e) => setEmailInput(e.target.value)}
-                          placeholder="student@school.edu"
+                          placeholder="you@example.com"
                           className="w-full rounded-lg border border-[#D8D1C4] bg-white py-2 pl-9 pr-3 text-sm text-[#1C232B] focus:border-[#1D4ED8] focus:outline-none"
                         />
                       </div>
@@ -991,7 +1105,7 @@ function AccountModalBody({
                           required
                           value={passwordInput}
                           onChange={(e) => setPasswordInput(e.target.value)}
-                          placeholder="Minimum 8 characters"
+                          placeholder="Enter your password"
                           className="w-full rounded-lg border border-[#D8D1C4] bg-white py-2 pl-9 pr-9 text-sm text-[#1C232B] focus:border-[#1D4ED8] focus:outline-none"
                         />
                         <button
@@ -1023,33 +1137,31 @@ function AccountModalBody({
 
                     <button
                       type="submit"
+                      disabled={isSubmitting}
                       data-testid="auth-signin-submit"
-                      className="btn-cobalt w-full rounded-xl py-2.5 text-xs font-semibold"
+                      className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold disabled:opacity-60"
                     >
-                      Sign In &amp; Sync Local Progress
+                      {isSubmitting && (
+                        <Loader2
+                          className="h-3.5 w-3.5 animate-spin"
+                          aria-hidden="true"
+                        />
+                      )}
+                      Sign In with Email
                     </button>
                   </form>
                 )}
 
-                {/* SIGN UP FORM */}
+                {/* FREE EMAIL REGISTRATION FORM — ANY EMAIL ADDRESS, ZERO PAYMENT */}
                 {authMode === 'signup' && (
                   <form onSubmit={handleEmailSignUp} className="space-y-3">
-                    <button
-                      type="button"
-                      onClick={handleGoogleSignInPreview}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#D8D1C4] bg-white py-2.5 text-xs font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8]"
-                    >
-                      <UserPlus className="h-4 w-4" aria-hidden="true" />
-                      Sign Up with Google (Fastest for Schools)
-                    </button>
-
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
                         <label
                           htmlFor="auth-signup-name"
                           className="block text-xs font-semibold text-[#1C232B]"
                         >
-                          Public Display Name
+                          Display Name (Public)
                         </label>
                         <input
                           id="auth-signup-name"
@@ -1098,19 +1210,23 @@ function AccountModalBody({
                         htmlFor="auth-signup-email"
                         className="block text-xs font-semibold text-[#1C232B]"
                       >
-                        {signupTier === 'explorers'
-                          ? 'Parent / Guardian Email (Private)'
-                          : 'Student Email (Private)'}
+                        Email Address (Any Email ID · Kept Private)
                       </label>
-                      <input
-                        id="auth-signup-email"
-                        type="email"
-                        required
-                        value={emailInput}
-                        onChange={(e) => setEmailInput(e.target.value)}
-                        placeholder="never-shown-publicly@example.com"
-                        className="mt-1 w-full rounded-lg border border-[#D8D1C4] bg-white px-3 py-2 text-sm text-[#1C232B] focus:border-[#1D4ED8] focus:outline-none"
-                      />
+                      <div className="relative mt-1">
+                        <Mail
+                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#7A8490]"
+                          aria-hidden="true"
+                        />
+                        <input
+                          id="auth-signup-email"
+                          type="email"
+                          required
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          placeholder="any-email@example.com"
+                          className="w-full rounded-lg border border-[#D8D1C4] bg-white py-2 pl-9 pr-3 text-sm text-[#1C232B] focus:border-[#1D4ED8] focus:outline-none"
+                        />
+                      </div>
                     </div>
 
                     <div>
@@ -1120,15 +1236,35 @@ function AccountModalBody({
                       >
                         Create Password
                       </label>
-                      <input
-                        id="auth-signup-password"
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        value={passwordInput}
-                        onChange={(e) => setPasswordInput(e.target.value)}
-                        placeholder="8+ chars with letters & numbers"
-                        className="mt-1 w-full rounded-lg border border-[#D8D1C4] bg-white px-3 py-2 text-sm text-[#1C232B] focus:border-[#1D4ED8] focus:outline-none"
-                      />
+                      <div className="relative mt-1">
+                        <Lock
+                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#7A8490]"
+                          aria-hidden="true"
+                        />
+                        <input
+                          id="auth-signup-password"
+                          type={showPassword ? 'text' : 'password'}
+                          required
+                          value={passwordInput}
+                          onChange={(e) => setPasswordInput(e.target.value)}
+                          placeholder="8+ chars with letters & numbers"
+                          className="w-full rounded-lg border border-[#D8D1C4] bg-white py-2 pl-9 pr-9 text-sm text-[#1C232B] focus:border-[#1D4ED8] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          aria-label={
+                            showPassword ? 'Hide password' : 'Show password'
+                          }
+                          className="absolute right-2.5 top-2 text-[#7A8490] hover:text-[#1C232B]"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" aria-hidden="true" />
+                          ) : (
+                            <Eye className="h-4 w-4" aria-hidden="true" />
+                          )}
+                        </button>
+                      </div>
                       <div className="mt-1.5 flex items-center justify-between text-[11px] text-[#5A6572]">
                         <span>Strength: {pwStrength.label}</span>
                         <span className="font-mono">
@@ -1139,28 +1275,29 @@ function AccountModalBody({
                       </div>
                     </div>
 
-                    {signupTier === 'explorers' && (
-                      <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-[#DFC99B] bg-[#FDF6E7] p-2.5 text-xs text-[#6B4209]">
-                        <input
-                          type="checkbox"
-                          checked={guardianConsent}
-                          onChange={(e) => setGuardianConsent(e.target.checked)}
-                          className="mt-0.5 h-3.5 w-3.5 rounded accent-[#B45309]"
-                        />
-                        <span>
-                          Parent/guardian approval confirmed for this under-13
-                          learner (COPPA child-privacy safeguard).
-                        </span>
-                      </label>
-                    )}
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-[#46515E]">
+                      <input
+                        type="checkbox"
+                        checked={sharedDevice}
+                        onChange={(e) => setSharedDevice(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded accent-[#1D4ED8]"
+                      />
+                      Shared computer (sign out automatically when tab closes)
+                    </label>
 
                     <button
                       type="submit"
+                      disabled={isSubmitting}
                       data-testid="auth-signup-submit"
-                      className="btn-cobalt w-full rounded-xl py-2.5 text-xs font-semibold"
+                      className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold disabled:opacity-60"
                     >
-                      Create Student Account &amp; Merge {matchCount} Local{' '}
-                      {matchCount === 1 ? 'Match' : 'Matches'}
+                      {isSubmitting && (
+                        <Loader2
+                          className="h-3.5 w-3.5 animate-spin"
+                          aria-hidden="true"
+                        />
+                      )}
+                      Create Free Account — Unlock Unlimited Levels
                     </button>
                   </form>
                 )}
@@ -1172,9 +1309,8 @@ function AccountModalBody({
                     className="space-y-3.5"
                   >
                     <p className="text-xs leading-relaxed text-[#46515E]">
-                      Enter your account email to receive a single-use,
-                      15-minute password reset link. For privacy, we show the
-                      same confirmation whether or not an email is registered.
+                      Enter the email address you registered with to receive a
+                      password reset link.
                     </p>
                     <div>
                       <label
@@ -1189,25 +1325,32 @@ function AccountModalBody({
                         required
                         value={emailInput}
                         onChange={(e) => setEmailInput(e.target.value)}
-                        placeholder="student@school.edu"
+                        placeholder="you@example.com"
                         className="mt-1 w-full rounded-lg border border-[#D8D1C4] bg-white px-3 py-2 text-sm text-[#1C232B] focus:border-[#1D4ED8] focus:outline-none"
                       />
                     </div>
                     <button
                       type="submit"
+                      disabled={isSubmitting}
                       data-testid="auth-recovery-submit"
-                      className="btn-cobalt w-full rounded-xl py-2.5 text-xs font-semibold"
+                      className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold disabled:opacity-60"
                     >
+                      {isSubmitting && (
+                        <Loader2
+                          className="h-3.5 w-3.5 animate-spin"
+                          aria-hidden="true"
+                        />
+                      )}
                       Send Password Reset Link
                     </button>
                   </form>
                 )}
 
                 <p className="rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-3 py-2 text-[11px] leading-relaxed text-[#5A6572]">
-                  <strong>Privacy &amp; Prototype Note:</strong> Emails remain
-                  strictly private and are never shown on scoreboards. This
-                  modal previews the full Firebase Auth + Firestore lifecycle
-                  locally until cloud provisioning is enabled.
+                  <strong>100% Free &amp; Private:</strong> Register with any
+                  email address — no payment ever required. Only your chosen
+                  display name appears on the Daily &amp; Weekly Top 10
+                  Leaderboards; your email is never shared publicly.
                 </p>
               </>
             )}
@@ -1215,16 +1358,98 @@ function AccountModalBody({
         )}
 
         {errorMessage && (
-          <p
+          <div
             role="alert"
-            className="mt-3 rounded-lg border border-[#FECDD3] bg-[#FFF5F7] px-3 py-2 text-xs font-medium text-[#BE123C]"
+            data-testid="account-modal-error"
+            className="mt-3 rounded-lg border border-[#FECDD3] bg-[#FFF5F7] px-3 py-2.5 text-xs font-medium text-[#BE123C]"
           >
-            {errorMessage}
-          </p>
+            <p className="leading-relaxed">{errorMessage}</p>
+            {providerSetupRequired && (
+              <div className="mt-2.5 space-y-2 border-t border-[#FECDD3] pt-2.5 text-[11px] font-normal text-[#46515E]">
+                <ol className="list-decimal space-y-1 pl-4 leading-relaxed">
+                  <li>
+                    Open Firebase Console →{' '}
+                    <strong className="font-semibold text-[#1C232B]">
+                      Authentication → Sign-in method
+                    </strong>
+                    .
+                  </li>
+                  <li>
+                    Select{' '}
+                    <strong className="font-semibold text-[#1C232B]">
+                      Add new provider → Email/Password
+                    </strong>
+                    .
+                  </li>
+                  <li>
+                    Toggle{' '}
+                    <strong className="font-semibold text-[#1C232B]">
+                      Enable
+                    </strong>{' '}
+                    on, click{' '}
+                    <strong className="font-semibold text-[#1C232B]">
+                      Save
+                    </strong>
+                    , then submit this form again.
+                  </li>
+                </ol>
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <a
+                    href={FIREBASE_AUTH_PROVIDERS_CONSOLE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[#D8D1C4] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#1D4ED8] hover:border-[#1D4ED8] whitespace-nowrap shrink-0"
+                  >
+                    Open Firebase Console
+                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        typeof navigator !== 'undefined' &&
+                        navigator.clipboard
+                      ) {
+                        void navigator.clipboard
+                          .writeText(FIREBASE_AUTH_PROVIDERS_CONSOLE_URL)
+                          .then(() => {
+                            setCopiedConsoleUrl(true);
+                            window.setTimeout(
+                              () => setCopiedConsoleUrl(false),
+                              2200
+                            );
+                          })
+                          .catch(() => {});
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[#D8D1C4] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] whitespace-nowrap shrink-0"
+                  >
+                    {copiedConsoleUrl ? (
+                      <>
+                        <Check
+                          className="h-3 w-3 text-[#047857]"
+                          aria-hidden="true"
+                        />
+                        Copied URL
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3" aria-hidden="true" />
+                        Copy Console URL
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {statusMessage && (
-          <p className="mt-3 rounded-lg border border-[#D1FAE5] bg-[#F2FBF7] px-3 py-2 text-xs font-medium text-[#047857]">
+          <p
+            data-testid="account-modal-status"
+            className="mt-3 rounded-lg border border-[#D1FAE5] bg-[#F2FBF7] px-3 py-2 text-xs font-medium text-[#047857]"
+          >
             {statusMessage}
           </p>
         )}
@@ -1237,7 +1462,11 @@ export default function AccountModal(props: AccountModalProps) {
   if (!props.open) return null;
   return (
     <AccountModalBody
+      key={`${props.initialSection ?? 'profile'}-${props.initialAuthMode ?? 'signin'}-${props.registrationGateGameTitle ?? ''}`}
       onClose={props.onClose}
+      initialSection={props.initialSection}
+      initialAuthMode={props.initialAuthMode}
+      registrationGateGameTitle={props.registrationGateGameTitle}
       profile={props.profile}
       matchCount={props.matchCount}
       achievementEvaluation={props.achievementEvaluation}

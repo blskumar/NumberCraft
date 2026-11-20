@@ -137,7 +137,7 @@ test('Integration: 100-match storage alignment (G1) + profile featuredBadgeId pe
     displayName: 'Maya Chen',
     ageTier: 'strategists',
     soundEnabled: false,
-    sessionKind: 'signed-in-preview',
+    sessionKind: 'authenticated',
     featuredBadgeId: 'perfect-streak',
   });
 

@@ -3,6 +3,27 @@ import { isSampleMatch } from './notebook-analytics';
 import type { DailyChallengeCompletion, MatchRecord } from './types';
 
 export const DAILY_PROBLEM_GOAL = 10;
+export const MIN_DAILY_PROBLEM_GOAL = 5;
+export const MAX_DAILY_PROBLEM_GOAL = 100;
+export const DAILY_GOAL_PRESETS = [10, 15, 25, 40] as const;
+
+export function clampDailyProblemGoal(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DAILY_PROBLEM_GOAL;
+  }
+  const rounded = Math.round(value);
+  return Math.min(
+    MAX_DAILY_PROBLEM_GOAL,
+    Math.max(MIN_DAILY_PROBLEM_GOAL, rounded)
+  );
+}
+
+export interface TodayProblemBreakdown {
+  arithmeticProblems: number;
+  dailyChallengeProblems: number;
+  arenaProblems: number;
+  totalProblems: number;
+}
 
 export interface DailyGoalProgress {
   todayDateKey: string;
@@ -21,46 +42,77 @@ export interface DailyGoalProgress {
 }
 
 /**
+ * Returns a per-source breakdown of problems/rounds completed on a given local date key
+ * across Core Arithmetic, Daily Challenges, Factor Grid, Equation Foundry, and Odds & Urns.
+ */
+export function getTodayProblemBreakdown(
+  matches: MatchRecord[],
+  dailyCompletions: DailyChallengeCompletion[],
+  dateKey: string,
+  includeSampleMatches: boolean = false
+): TodayProblemBreakdown {
+  let arithmeticProblems = 0;
+  let dailyChallengeProblems = 0;
+  let arenaProblems = 0;
+
+  for (const m of matches) {
+    if (!includeSampleMatches && isSampleMatch(m)) continue;
+    if (m.dailyMeta) continue; // counted cleanly via dailyCompletions below
+    const playedDateKey = getLocalDateKey(new Date(m.playedAt));
+    if (playedDateKey !== dateKey) continue;
+
+    const mult =
+      m.dailyMilestoneMultiplier && m.dailyMilestoneMultiplier > 1
+        ? m.dailyMilestoneMultiplier
+        : 1;
+
+    if (m.arithmeticMeta) {
+      const baseCredit = Math.max(0, m.arithmeticMeta.solved);
+      arithmeticProblems += Math.round(baseCredit * mult);
+    } else if (
+      m.gameTitle === 'Equation Foundry' ||
+      m.gameTitle === 'Odds & Urns'
+    ) {
+      arenaProblems += Math.round(5 * mult);
+    } else {
+      arenaProblems += Math.round(3 * mult);
+    }
+  }
+
+  for (const dc of dailyCompletions) {
+    if (dc.dateKey === dateKey && dc.solved) {
+      dailyChallengeProblems += 3; // 3-clue chained daily puzzle
+    }
+  }
+
+  return {
+    arithmeticProblems,
+    dailyChallengeProblems,
+    arenaProblems,
+    totalProblems: arithmeticProblems + dailyChallengeProblems + arenaProblems,
+  };
+}
+
+/**
  * Counts how many problems/rounds the student completed on a given local date key
  * across Core Arithmetic, Daily Challenges, Factor Grid, Equation Foundry, and Odds & Urns.
  */
 export function countProblemsSolvedOnDate(
   matches: MatchRecord[],
   dailyCompletions: DailyChallengeCompletion[],
-  dateKey: string
+  dateKey: string,
+  includeSampleMatches: boolean = false
 ): number {
-  let count = 0;
-
-  for (const m of matches) {
-    if (isSampleMatch(m)) continue;
-    if (m.dailyMeta) continue; // counted cleanly via dailyCompletions below
-    const playedDateKey = getLocalDateKey(new Date(m.playedAt));
-    if (playedDateKey !== dateKey) continue;
-
-    let baseCredit = 3; // Factor Grid completed match
-    if (m.arithmeticMeta) {
-      baseCredit = Math.max(0, m.arithmeticMeta.solved);
-    } else if (m.gameTitle === 'Equation Foundry' || m.gameTitle === 'Odds & Urns') {
-      baseCredit = 5; // 5-round session
-    }
-    const mult =
-      m.dailyMilestoneMultiplier && m.dailyMilestoneMultiplier > 1
-        ? m.dailyMilestoneMultiplier
-        : 1;
-    count += Math.round(baseCredit * mult);
-  }
-
-  for (const dc of dailyCompletions) {
-    if (dc.dateKey === dateKey && dc.solved) {
-      count += 3; // 3-clue chained daily puzzle
-    }
-  }
-
-  return count;
+  return getTodayProblemBreakdown(
+    matches,
+    dailyCompletions,
+    dateKey,
+    includeSampleMatches
+  ).totalProblems;
 }
 
 /**
- * Computes StudioHub's Daily Goal progress ring metrics and consecutive daily
+ * Computes Daily Goal progress ring metrics and consecutive daily
  * streak milestone targets.
  */
 export function computeDailyGoalProgress(params: {
@@ -68,14 +120,19 @@ export function computeDailyGoalProgress(params: {
   dailyCompletions: DailyChallengeCompletion[];
   todayKey?: string;
   dailyProblemGoal?: number;
+  includeSampleMatches?: boolean;
 }): DailyGoalProgress {
   const todayDateKey = params.todayKey ?? getLocalDateKey();
-  const goal = params.dailyProblemGoal ?? DAILY_PROBLEM_GOAL;
+  const goal =
+    params.dailyProblemGoal !== undefined
+      ? clampDailyProblemGoal(params.dailyProblemGoal)
+      : DAILY_PROBLEM_GOAL;
 
   const problemsSolvedToday = countProblemsSolvedOnDate(
     params.matches,
     params.dailyCompletions,
-    todayDateKey
+    todayDateKey,
+    Boolean(params.includeSampleMatches)
   );
   const problemsRemaining = Math.max(0, goal - problemsSolvedToday);
   const ringPercent = Math.min(

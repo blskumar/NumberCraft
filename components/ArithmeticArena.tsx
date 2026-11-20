@@ -69,6 +69,8 @@ interface ArithmeticArenaProps {
   onOpenNotebook: () => void;
   onRecordMatch: (record: MatchRecord) => void;
   matches: MatchRecord[];
+  isGameLockedForGuest?: (gameId: ArithmeticGameId) => boolean;
+  onRequireRegistration?: (gameId: ArithmeticGameId) => void;
 }
 
 const TIER_ORDER: AgeTier[] = ['explorers', 'challengers', 'strategists'];
@@ -87,6 +89,8 @@ export default function ArithmeticArena({
   onOpenNotebook,
   onRecordMatch,
   matches,
+  isGameLockedForGuest,
+  onRequireRegistration,
 }: ArithmeticArenaProps) {
   const [gameId, setGameId] = useState<ArithmeticGameId>(initialGameId);
   const [pace, setPace] = useState<ArithmeticPace>('standard');
@@ -221,6 +225,10 @@ export default function ArithmeticArena({
   const startRound = useCallback(
     (overrideGameId?: ArithmeticGameId) => {
       const targetGame = overrideGameId ?? gameId;
+      if (isGameLockedForGuest?.(targetGame)) {
+        onRequireRegistration?.(targetGame);
+        return;
+      }
       const startCal = computeHistoricalCalibration(
         matches,
         targetGame,
@@ -268,7 +276,16 @@ export default function ArithmeticArena({
       setElapsedSeconds(0);
       setPhase('playing');
     },
-    [gameId, matches, ageTier, roundConfig, adaptiveDifficulty, pace]
+    [
+      gameId,
+      matches,
+      ageTier,
+      roundConfig,
+      adaptiveDifficulty,
+      pace,
+      isGameLockedForGuest,
+      onRequireRegistration,
+    ]
   );
 
   // Countdown / Elapsed timer during active play
@@ -1432,16 +1449,40 @@ export default function ArithmeticArena({
             </div>
           )}
 
+          {isGameLockedForGuest?.(gameId) && (
+            <div
+              data-testid="arena-guest-trial-notice"
+              className="mt-5 rounded-xl border border-[#1D4ED8]/35 bg-[#EFF5FF] px-4 py-3 text-xs text-[#1C232B]"
+            >
+              <strong>Free Guest Trial Complete:</strong> You&apos;ve completed
+              your 1 free level for {ARITHMETIC_GAMES[gameId].title}. Register
+              for free with any email address (no payment required) to unlock
+              unlimited levels and save your scores to the Top 10 Leaderboards.
+            </div>
+          )}
+
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => startRound()}
-                className="btn-cobalt inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold"
-              >
-                <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                Play Again
-              </button>
+              {isGameLockedForGuest?.(gameId) ? (
+                <button
+                  type="button"
+                  data-testid="arena-guest-register-btn"
+                  onClick={() => onRequireRegistration?.(gameId)}
+                  className="btn-cobalt inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold"
+                >
+                  Register Free to Continue
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => startRound()}
+                  className="btn-cobalt inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold"
+                >
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                  Play Again
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setPhase('setup')}

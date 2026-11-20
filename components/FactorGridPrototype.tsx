@@ -57,6 +57,8 @@ interface FactorGridPrototypeProps {
   onOpenNotebook: () => void;
   onRecordMatch: (record: MatchRecord) => AchievementDefinition[];
   autoStart?: boolean;
+  guestTrialLocked?: boolean;
+  onRequireRegistration?: () => void;
 }
 
 type StageView = 'setup' | 'playing';
@@ -72,6 +74,8 @@ export default function FactorGridPrototype({
   onOpenNotebook,
   onRecordMatch,
   autoStart = false,
+  guestTrialLocked = false,
+  onRequireRegistration,
 }: FactorGridPrototypeProps) {
   const [stage, setStage] = useState<StageView>(autoStart ? 'playing' : 'setup');
   const [mode, setMode] = useState<PlayMode>('vs-ai');
@@ -208,6 +212,10 @@ export default function FactorGridPrototype({
   }, [aiThinking, game, soundEnabled, finalizeIfGameOver]);
 
   function startNewMatch(overrideTier?: AgeTier) {
+    if (guestTrialLocked) {
+      onRequireRegistration?.();
+      return;
+    }
     const targetTier = overrideTier ?? ageTier;
     recordedMatchRef.current = false;
     setHoveredTile(null);
@@ -1201,21 +1209,45 @@ export default function FactorGridPrototype({
               </div>
             )}
 
-            <div className="mt-6 flex flex-wrap gap-2.5">
-              <button
-                type="button"
-                data-start="true"
-                onClick={() => startNewMatch()}
-                className="btn-cobalt flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+            {guestTrialLocked && (
+              <div
+                data-testid="arena-guest-trial-notice"
+                className="mt-4 rounded-xl border border-[#1D4ED8]/35 bg-[#EFF5FF] px-3.5 py-2.5 text-xs text-[#1C232B]"
               >
-                Play Again
-              </button>
+                <strong>Free Guest Trial Complete:</strong> Register for free
+                with any email (no payment required) to unlock unlimited Factor
+                Grid matches and save scores.
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-wrap gap-2.5">
+              {guestTrialLocked ? (
+                <button
+                  type="button"
+                  data-testid="arena-guest-register-btn"
+                  onClick={() => onRequireRegistration?.()}
+                  className="btn-cobalt flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+                >
+                  Register Free to Continue
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  data-start="true"
+                  onClick={() => startNewMatch()}
+                  className="btn-cobalt flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+                >
+                  Play Again
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setStage('setup')}
+                onClick={() =>
+                  guestTrialLocked ? onBackToStudio() : setStage('setup')
+                }
                 className="rounded-xl border border-[#D8D0C0] bg-[#FAF8F4] px-4 py-2.5 text-sm font-semibold text-[#1C232B] hover:border-[#1D4ED8] transition-colors whitespace-nowrap"
               >
-                Change Mode
+                {guestTrialLocked ? 'Back to Studio' : 'Change Mode'}
               </button>
             </div>
           </motion.div>

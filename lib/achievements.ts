@@ -68,6 +68,31 @@ export function getMasterySealProgressPercent(
   return Math.min(100, Math.max(0, Math.round((earnedCount / totalCount) * 100)));
 }
 
+export interface MasteryUnlockPulseCheck {
+  isHydrated: boolean;
+  hasBaseline: boolean;
+  prevEarnedCount: number;
+  nextEarnedCount: number;
+  prevEventKey: number;
+  nextEventKey: number;
+}
+
+/**
+ * Determines whether MasteryProgressBar should play its subtle badge-unlock
+ * entrance & glow animation. Suppresses initial hydration/baseline setup and
+ * count decreases (e.g. clearing sample data), while triggering on any post-
+ * hydration earnedCount increase or explicit badge-unlock event increment.
+ */
+export function shouldTriggerMasteryUnlockPulse(
+  input: MasteryUnlockPulseCheck
+): boolean {
+  if (!input.isHydrated || !input.hasBaseline) return false;
+  if (input.nextEventKey > input.prevEventKey && input.nextEventKey > 0) {
+    return true;
+  }
+  return input.nextEarnedCount > input.prevEarnedCount;
+}
+
 export const ACHIEVEMENT_CATALOG: AchievementDefinition[] = [
   {
     id: 'first-victory',

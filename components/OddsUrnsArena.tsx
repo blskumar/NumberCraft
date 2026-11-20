@@ -60,6 +60,8 @@ interface OddsUrnsArenaProps {
   onBackToStudio: () => void;
   onOpenNotebook: () => void;
   onRecordMatch: (record: MatchRecord) => AchievementDefinition[];
+  guestTrialLocked?: boolean;
+  onRequireRegistration?: () => void;
 }
 
 const TOTAL_ROUNDS = 5;
@@ -258,6 +260,8 @@ export default function OddsUrnsArena({
   onBackToStudio,
   onOpenNotebook,
   onRecordMatch,
+  guestTrialLocked = false,
+  onRequireRegistration,
 }: OddsUrnsArenaProps) {
   const prefersReducedMotion = useReducedMotion();
 
@@ -384,6 +388,10 @@ export default function OddsUrnsArena({
 
   const startSession = useCallback(
     (nextTier: AgeTier = ageTier) => {
+      if (guestTrialLocked) {
+        onRequireRegistration?.();
+        return;
+      }
       clearBotTimer();
       setRoundNumber(1);
       setTurnOwner('player');
@@ -407,7 +415,15 @@ export default function OddsUrnsArena({
       setPhase('playing');
       playTileClaimSound(soundEnabled, true);
     },
-    [ageTier, chamber, clearBotTimer, resetChamberForTurn, soundEnabled]
+    [
+      ageTier,
+      chamber,
+      clearBotTimer,
+      guestTrialLocked,
+      onRequireRegistration,
+      resetChamberForTurn,
+      soundEnabled,
+    ]
   );
 
   const advanceAfterPlayerTurn = useCallback(

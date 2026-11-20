@@ -29,13 +29,22 @@ import {
   Zap,
 } from 'lucide-react';
 import { getLocalDateKey } from '@/lib/daily-challenge';
+import {
+  clampDailyProblemGoal,
+  computeDailyGoalProgress,
+  DAILY_PROBLEM_GOAL,
+  getTodayProblemBreakdown,
+} from '@/lib/daily-goal';
+import { evaluateDailyMilestone } from '@/lib/daily-milestone';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
+import type { PlayableGameId } from '@/lib/guest-trial';
 import { isSampleMatch } from '@/lib/notebook-analytics';
 import {
   buildArithmeticAccuracySeries,
   buildArithmeticGameBreakdown,
   buildChallengeCompletionHistory,
   buildDailyChallenge30DayFrequency,
+  buildDailyGoalCompletionRate30Day,
   buildDailyScoreSpeedSeries,
   computeDashboardOverview,
   isSampleDailyCompletion,
@@ -45,9 +54,12 @@ import {
   type DashboardGameFilter,
   type DashboardTierFilter,
 } from '@/lib/performance-dashboard';
+import DashboardDailyGoalCard from './DashboardDailyGoalCard';
 import DailyConsistencyChart30Day from './DailyConsistencyChart30Day';
 import DailyStreakTrendChart from './DailyStreakTrendChart';
+import DailyGoalCompletionRateChart from './DailyGoalCompletionRateChart';
 import DailyLeaderboardCard from './DailyLeaderboardCard';
+import GameTopTenLeaderboard from './GameTopTenLeaderboard';
 import type {
   ArithmeticGameId,
   DailyChallengeCompletion,
@@ -59,8 +71,11 @@ interface PerformanceDashboardProps {
   profile: StudentProfile;
   matches: MatchRecord[];
   dailyCompletions: DailyChallengeCompletion[];
+  onChangeDailyGoal: (nextGoal: number) => void;
   onLaunchArithmetic: (gameId: ArithmeticGameId) => void;
+  onLaunchGame: (gameId: PlayableGameId) => void;
   onOpenDaily: () => void;
+  onOpenRegister: () => void;
   onLoadSampleDashboard: () => void;
   onClearSampleDashboard: () => void;
 }
@@ -221,8 +236,11 @@ export default function PerformanceDashboard({
   profile,
   matches,
   dailyCompletions,
+  onChangeDailyGoal,
   onLaunchArithmetic,
+  onLaunchGame,
   onOpenDaily,
+  onOpenRegister,
   onLoadSampleDashboard,
   onClearSampleDashboard,
 }: PerformanceDashboardProps) {
@@ -234,12 +252,43 @@ export default function PerformanceDashboard({
   );
 
   const todayKey = useMemo(() => getLocalDateKey(), []);
+  const dailyProblemGoal = clampDailyProblemGoal(
+    profile.dailyProblemGoal ?? DAILY_PROBLEM_GOAL
+  );
 
   const hasSampleData = useMemo(
     () =>
       matches.some((m) => isSampleMatch(m)) ||
       dailyCompletions.some((c) => isSampleDailyCompletion(c)),
     [matches, dailyCompletions]
+  );
+
+  const dailyGoalProgress = useMemo(
+    () =>
+      computeDailyGoalProgress({
+        matches,
+        dailyCompletions,
+        todayKey,
+        dailyProblemGoal,
+        includeSampleMatches: hasSampleData,
+      }),
+    [matches, dailyCompletions, todayKey, dailyProblemGoal, hasSampleData]
+  );
+
+  const dailyMilestoneStatus = useMemo(
+    () => evaluateDailyMilestone(matches, todayKey),
+    [matches, todayKey]
+  );
+
+  const todayBreakdown = useMemo(
+    () =>
+      getTodayProblemBreakdown(
+        matches,
+        dailyCompletions,
+        todayKey,
+        hasSampleData
+      ),
+    [matches, dailyCompletions, todayKey, hasSampleData]
   );
 
   const overview = useMemo(
@@ -270,6 +319,11 @@ export default function PerformanceDashboard({
 
   const dailyConsistency30Day = useMemo(
     () => buildDailyChallenge30DayFrequency(dailyCompletions, todayKey),
+    [dailyCompletions, todayKey]
+  );
+
+  const dailyGoalCompletionRate30Day = useMemo(
+    () => buildDailyGoalCompletionRate30Day(dailyCompletions, todayKey),
     [dailyCompletions, todayKey]
   );
 
@@ -438,6 +492,16 @@ export default function PerformanceDashboard({
           </p>
         </div>
       </section>
+
+      {/* DAILY GOAL SETTING + CIRCULAR PROGRESS RING */}
+      <DashboardDailyGoalCard
+        progress={dailyGoalProgress}
+        breakdown={todayBreakdown}
+        dailyProblemGoal={dailyProblemGoal}
+        onChangeDailyGoal={onChangeDailyGoal}
+        onStartPractice={() => onLaunchArithmetic('addition-attack')}
+        onOpenDaily={onOpenDaily}
+      />
 
       {/* CHART 1: Arithmetic Accuracy & Adaptive Band Over Time */}
       <section
@@ -1043,6 +1107,16 @@ export default function PerformanceDashboard({
       <DailyStreakTrendChart
         dailyCompletions={dailyCompletions}
         todayKey={todayKey}
+        dailyGoalMetToday={dailyGoalProgress.goalMetToday}
+        dailyMilestoneCompletedToday={dailyMilestoneStatus.completedToday}
+        onOpenDaily={onOpenDaily}
+        hasSampleData={hasSampleData}
+        onLoadSampleDashboard={onLoadSampleDashboard}
+      />
+
+      {/* FULL-WIDTH 30-DAY DAILY GOAL COMPLETION RATE BAR CHART */}
+      <DailyGoalCompletionRateChart
+        data={dailyGoalCompletionRate30Day}
         onOpenDaily={onOpenDaily}
         hasSampleData={hasSampleData}
         onLoadSampleDashboard={onLoadSampleDashboard}
@@ -1054,6 +1128,14 @@ export default function PerformanceDashboard({
         dailyCompletions={dailyCompletions}
         todayKey={todayKey}
         onOpenDaily={onOpenDaily}
+      />
+
+      {/* TOP 10 PER-GAME DAILY & WEEKLY CLOUD LEADERBOARD */}
+      <GameTopTenLeaderboard
+        profile={profile}
+        todayKey={todayKey}
+        onOpenRegister={onOpenRegister}
+        onLaunchGame={onLaunchGame}
       />
     </main>
   );

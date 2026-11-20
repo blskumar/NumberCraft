@@ -1,6 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeDailyGoalProgress, DAILY_PROBLEM_GOAL } from './daily-goal';
+import {
+  clampDailyProblemGoal,
+  computeDailyGoalProgress,
+  DAILY_PROBLEM_GOAL,
+  getTodayProblemBreakdown,
+  MAX_DAILY_PROBLEM_GOAL,
+  MIN_DAILY_PROBLEM_GOAL,
+} from './daily-goal';
 import type { DailyChallengeCompletion, MatchRecord } from './types';
 
 describe('Daily Goal Progress Ring & Streak Counter (lib/daily-goal.ts)', () => {
@@ -37,12 +44,11 @@ describe('Daily Goal Progress Ring & Streak Counter (lib/daily-goal.ts)', () => 
         arithmeticMeta: {
           gameId: 'addition-attack',
           pace: 'standard',
-          untimed: false,
           solved: 7,
           attempted: 8,
-          accuracy: 88,
+          accuracyPercent: 88,
           bestStreak: 5,
-          elapsedSeconds: 60,
+          durationSeconds: 60,
         },
       },
     ];
@@ -52,8 +58,10 @@ describe('Daily Goal Progress Ring & Streak Counter (lib/daily-goal.ts)', () => 
         dateKey: '2026-11-19',
         editionNumber: 100,
         tier: 'challengers',
-        archetype: 'number-trail',
+        archetype: 'equation-vault',
+        archetypeTitle: 'Equation Vault',
         solved: true,
+        stepsSolved: 3,
         score: 210,
         secondsUsed: 42,
         timeLimitSeconds: 90,
@@ -65,8 +73,10 @@ describe('Daily Goal Progress Ring & Streak Counter (lib/daily-goal.ts)', () => 
         dateKey: '2026-11-20',
         editionNumber: 101,
         tier: 'challengers',
-        archetype: 'factor-lock',
+        archetype: 'divisor-cipher',
+        archetypeTitle: 'Divisor & Sequence Cipher',
         solved: true,
+        stepsSolved: 3,
         score: 230,
         secondsUsed: 38,
         timeLimitSeconds: 90,
@@ -90,5 +100,83 @@ describe('Daily Goal Progress Ring & Streak Counter (lib/daily-goal.ts)', () => 
     assert.equal(progress.dailyStreak, 2);
     assert.equal(progress.solvedDailyToday, true);
     assert.equal(progress.streakDaysRemaining, 1);
+
+    // Custom higher target (e.g., 25) dynamically updates remaining count and ring percent
+    const customProgress = computeDailyGoalProgress({
+      matches,
+      dailyCompletions,
+      todayKey: '2026-11-20',
+      dailyProblemGoal: 25,
+    });
+    assert.equal(customProgress.dailyProblemGoal, 25);
+    assert.equal(customProgress.problemsRemaining, 15);
+    assert.equal(customProgress.ringPercent, 40);
+    assert.equal(customProgress.goalMetToday, false);
+  });
+
+  it('clamps custom daily goals safely and breaks down today counts by source', () => {
+    assert.equal(clampDailyProblemGoal(1), MIN_DAILY_PROBLEM_GOAL);
+    assert.equal(clampDailyProblemGoal(250), MAX_DAILY_PROBLEM_GOAL);
+    assert.equal(clampDailyProblemGoal(NaN), DAILY_PROBLEM_GOAL);
+    assert.equal(clampDailyProblemGoal(22.4), 22);
+
+    const todayIso = '2026-11-20T14:00:00.000Z';
+    const matches: MatchRecord[] = [
+      {
+        id: 'sample-dash-arith-9',
+        gameTitle: 'Multiplication Mastery',
+        mode: 'solo',
+        tier: 'challengers',
+        variant: 'classic',
+        playerScore: 276,
+        opponentScore: 130,
+        opponentName: 'Par',
+        result: 'win',
+        primesClaimed: 0,
+        playedAt: todayIso,
+        arithmeticMeta: {
+          gameId: 'multiplication-mastery',
+          pace: 'standard',
+          solved: 19,
+          attempted: 20,
+          accuracyPercent: 95,
+          bestStreak: 9,
+          durationSeconds: 60,
+        },
+      },
+      {
+        id: 'real-ef-1',
+        gameTitle: 'Equation Foundry',
+        mode: 'solo',
+        tier: 'challengers',
+        variant: 'classic',
+        playerScore: 180,
+        opponentScore: 120,
+        opponentName: 'Par',
+        result: 'win',
+        primesClaimed: 0,
+        playedAt: todayIso,
+      },
+    ];
+
+    const breakdownRealOnly = getTodayProblemBreakdown(
+      matches,
+      [],
+      '2026-11-20',
+      false
+    );
+    assert.equal(breakdownRealOnly.arithmeticProblems, 0);
+    assert.equal(breakdownRealOnly.arenaProblems, 5);
+    assert.equal(breakdownRealOnly.totalProblems, 5);
+
+    const breakdownWithSample = getTodayProblemBreakdown(
+      matches,
+      [],
+      '2026-11-20',
+      true
+    );
+    assert.equal(breakdownWithSample.arithmeticProblems, 19);
+    assert.equal(breakdownWithSample.arenaProblems, 5);
+    assert.equal(breakdownWithSample.totalProblems, 24);
   });
 });

@@ -58,6 +58,8 @@ interface EquationFoundryArenaProps {
   onBackToStudio: () => void;
   onOpenNotebook: () => void;
   onRecordMatch: (record: MatchRecord) => AchievementDefinition[];
+  guestTrialLocked?: boolean;
+  onRequireRegistration?: () => void;
 }
 
 const TOTAL_ROUNDS = 5;
@@ -77,6 +79,8 @@ export default function EquationFoundryArena({
   onBackToStudio,
   onOpenNotebook,
   onRecordMatch,
+  guestTrialLocked = false,
+  onRequireRegistration,
 }: EquationFoundryArenaProps) {
   const prefersReducedMotion = useReducedMotion();
 
@@ -121,6 +125,10 @@ export default function EquationFoundryArena({
 
   const startSession = useCallback(
     (nextTier: AgeTier = ageTier) => {
+      if (guestTrialLocked) {
+        onRequireRegistration?.();
+        return;
+      }
       const nextSeed = sessionSeed + 1;
       const firstPuzzle = generateFoundryPuzzle(nextTier, 1, nextSeed);
       setSessionSeed(nextSeed);
@@ -137,7 +145,13 @@ export default function EquationFoundryArena({
       setPhase('playing');
       playTileClaimSound(soundEnabled, true);
     },
-    [ageTier, sessionSeed, soundEnabled]
+    [
+      ageTier,
+      guestTrialLocked,
+      onRequireRegistration,
+      sessionSeed,
+      soundEnabled,
+    ]
   );
 
   const handleSelectTile = useCallback(

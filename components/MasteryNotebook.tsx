@@ -80,8 +80,8 @@ export default function MasteryNotebook({
         <div>
           <p className="text-xs font-medium text-[#5A6572]">
             Student Progress · {profile.displayName} ·{' '}
-            {profile.sessionKind === 'signed-in-preview'
-              ? 'Cloud Sync Preview'
+            {profile.sessionKind === 'authenticated'
+              ? 'Email Account · Cloud Scores Active'
               : 'Saved Locally in Guest Mode'}
             {featuredSeal && (
               <>

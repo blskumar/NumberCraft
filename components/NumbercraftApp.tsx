@@ -14,7 +14,10 @@ import OnlineRoomsPreview from '@/components/OnlineRoomsPreview';
 import MasteryNotebook from '@/components/MasteryNotebook';
 import PerformanceDashboard from '@/components/PerformanceDashboard';
 import GameRulesGuide from '@/components/GameRulesGuide';
-import AccountModal from '@/components/AccountModal';
+import AccountModal, {
+  type AccountAuthMode,
+  type AccountModalSection,
+} from '@/components/AccountModal';
 import MasteryProgressBar from '@/components/MasteryProgressBar';
 import SessionElapsedTimer from '@/components/SessionElapsedTimer';
 import ConfettiCelebration from '@/components/ConfettiCelebration';
@@ -27,12 +30,32 @@ import {
   buildDailyMatchRecord,
   getLocalDateKey,
 } from '@/lib/daily-challenge';
+import { clampDailyProblemGoal, DAILY_PROBLEM_GOAL } from '@/lib/daily-goal';
 import {
   DAILY_MILESTONE_MULTIPLIER,
   evaluateDailyMilestone,
   getDailyMilestoneForDate,
   isMatchForDailyMilestoneArena,
 } from '@/lib/daily-milestone';
+import {
+  fetchUserProfileDoc,
+  saveCloudGameScore,
+  subscribeToAuthState,
+  testFirestoreConnection,
+  upsertUserProfileDoc,
+} from '@/lib/firebase';
+import {
+  computeEffectiveGuestTrials,
+  incrementGuestTrialUsage,
+  isGuestGameLocked,
+  loadGuestTrialUsage,
+  PLAYABLE_GAME_CATALOG,
+  PLAYABLE_GAME_IDS,
+  resolveGameIdFromMatch,
+  saveGuestTrialUsage,
+  type GuestTrialUsageMap,
+  type PlayableGameId,
+} from '@/lib/guest-trial';
 import {
   appendMatch,
   clearAllLocalProgress,
@@ -91,6 +114,41 @@ const TAB_DEST_LABELS: Record<StudioTab, string> = {
   rules: 'Rules & Guide',
 };
 
+function resolveGameIdForTab(
+  tab: StudioTab,
+  activeArithmeticGame: ArithmeticGameId
+): PlayableGameId | null {
+  switch (tab) {
+    case 'play-arithmetic':
+      return activeArithmeticGame;
+    case 'play-factor-grid':
+      return 'factor-grid';
+    case 'play-equation-foundry':
+      return 'equation-foundry';
+    case 'play-odds-urns':
+      return 'odds-urns';
+    case 'daily':
+      return 'daily-challenge';
+    default:
+      return null;
+  }
+}
+
+function estimateMatchAccuracy(record: MatchRecord): number {
+  if (record.arithmeticMeta) {
+    return record.arithmeticMeta.accuracyPercent;
+  }
+  if (record.dailyMeta) {
+    const attempts = Math.max(1, 3 + record.dailyMeta.mistakes);
+    return Math.round((record.dailyMeta.stepsSolved / attempts) * 100);
+  }
+  const total = record.playerScore + record.opponentScore;
+  if (total > 0) {
+    return Math.min(100, Math.max(0, Math.round((record.playerScore / total) * 100)));
+  }
+  return record.result === 'win' ? 100 : 50;
+}
+
 export default function NumbercraftApp() {
   const searchParams = useSearchParams();
   const autoStartParam = searchParams.get('autostart') === '1';
@@ -107,7 +165,19 @@ export default function NumbercraftApp() {
   const [dailyCompletions, setDailyCompletions] = useState<
     DailyChallengeCompletion[]
   >([]);
+  const [storedGuestTrials, setStoredGuestTrials] =
+    useState<GuestTrialUsageMap>({});
+
+  // Account modal state (supports direct opening to Email Sign-Up / Guest Trial Gate)
   const [accountOpen, setAccountOpen] = useState(false);
+  const [accountInitialSection, setAccountInitialSection] =
+    useState<AccountModalSection>('profile');
+  const [accountInitialAuthMode, setAccountInitialAuthMode] =
+    useState<AccountAuthMode>('signin');
+  const [registrationGateGameTitle, setRegistrationGateGameTitle] = useState<
+    string | null
+  >(null);
+
   const [recentlyUnlockedBadgeIds, setRecentlyUnlockedBadgeIds] = useState<
     AchievementId[]
   >([]);
@@ -115,8 +185,12 @@ export default function NumbercraftApp() {
   const [themePreference, setThemePreference] =
     useState<ThemePreference>('system');
 
-  // Confetti celebration burst counter
+  // Confetti celebration burst counter & MasteryProgressBar unlock highlight signal
   const [confettiTriggerKey, setConfettiTriggerKey] = useState(0);
+  const [masteryUnlockEventKey, setMasteryUnlockEventKey] = useState(0);
+  const [latestUnlockedSealTitle, setLatestUnlockedSealTitle] = useState<
+    string | null
+  >(null);
 
   // Subtle persistent session timer + End-of-Session reflection modal state
   const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
@@ -135,7 +209,68 @@ export default function NumbercraftApp() {
   const profileRef = useRef<StudentProfile>(profile);
   const matchesRef = useRef<MatchRecord[]>(matches);
   const dailyRef = useRef<DailyChallengeCompletion[]>(dailyCompletions);
+  const storedGuestTrialsRef = useRef<GuestTrialUsageMap>(storedGuestTrials);
   const hasMountedTabRef = useRef(false);
+
+  const isSignedIn =
+    profile.sessionKind === 'authenticated' && Boolean(profile.uid);
+
+  const effectiveGuestTrials = useMemo(
+    () =>
+      computeEffectiveGuestTrials(
+        storedGuestTrials,
+        matches,
+        dailyCompletions
+      ),
+    [storedGuestTrials, matches, dailyCompletions]
+  );
+
+  const guestLockedGames = useMemo(() => {
+    const locked: Record<PlayableGameId, boolean> = {
+      'addition-attack': false,
+      'subtraction-sprint': false,
+      'multiplication-mastery': false,
+      'equation-foundry': false,
+      'odds-urns': false,
+      'factor-grid': false,
+      'daily-challenge': false,
+    };
+    for (const id of PLAYABLE_GAME_IDS) {
+      locked[id] = isGuestGameLocked({
+        isSignedIn,
+        gameId: id,
+        trialUsage: effectiveGuestTrials,
+      });
+    }
+    return locked;
+  }, [effectiveGuestTrials, isSignedIn]);
+
+  const openAccountModal = useCallback(
+    (opts?: {
+      section?: AccountModalSection;
+      authMode?: AccountAuthMode;
+      gateGameId?: PlayableGameId | null;
+    }) => {
+      setAccountInitialSection(opts?.section ?? 'profile');
+      setAccountInitialAuthMode(opts?.authMode ?? 'signin');
+      setRegistrationGateGameTitle(
+        opts?.gateGameId ? PLAYABLE_GAME_CATALOG[opts.gateGameId].title : null
+      );
+      setAccountOpen(true);
+    },
+    []
+  );
+
+  const openRegistrationGate = useCallback(
+    (gameId?: PlayableGameId) => {
+      openAccountModal({
+        section: 'auth',
+        authMode: 'signup',
+        gateGameId: gameId ?? null,
+      });
+    },
+    [openAccountModal]
+  );
 
   const inActiveGameArena = isActiveGameTab(activeTab);
 
@@ -165,13 +300,14 @@ export default function NumbercraftApp() {
     return () => window.clearInterval(id);
   }, [inActiveGameArena, pendingLeaveTab]);
 
-  // Hydrate guest profile, match ledger, daily history, and latched Mastery Seals once on mount
+  // Hydrate local profile, guest trial usage, match ledger, daily history, and latched Mastery Seals once on mount
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const loadedProfile = loadProfile();
       const loadedMatches = loadMatches();
       const loadedBadges = loadEarnedBadges();
       const loadedDaily = loadDailyCompletions();
+      const loadedGuestTrials = loadGuestTrialUsage();
       const loadedTheme =
         loadedProfile.themePreference ?? loadThemePreference();
       applyThemeToDocument(loadedTheme);
@@ -198,13 +334,72 @@ export default function NumbercraftApp() {
       earnedBadgesRef.current = reconciled.earnedRecords;
       matchesRef.current = loadedMatches;
       dailyRef.current = loadedDaily;
+      storedGuestTrialsRef.current = loadedGuestTrials;
       setProfile(nextProfile);
       setMatches(loadedMatches);
       setEarnedBadges(reconciled.earnedRecords);
       setDailyCompletions(loadedDaily);
+      setStoredGuestTrials(loadedGuestTrials);
       setHydrated(true);
     }, 0);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  // Validate Firestore connectivity once on boot + keep Firebase Email Auth in sync
+  useEffect(() => {
+    void testFirestoreConnection();
+
+    const unsubscribe = subscribeToAuthState(async (firebaseUser) => {
+      if (firebaseUser) {
+        let remoteProfile = null;
+        try {
+          remoteProfile = await fetchUserProfileDoc(firebaseUser.uid);
+        } catch {
+          remoteProfile = null;
+        }
+
+        const current = profileRef.current;
+        const resolvedName =
+          remoteProfile?.displayName ||
+          firebaseUser.displayName?.trim() ||
+          (current.displayName !== 'Guest Explorer'
+            ? current.displayName
+            : (firebaseUser.email ?? 'Scholar').split('@')[0].slice(0, 24));
+
+        const nextProfile: StudentProfile = {
+          ...current,
+          uid: firebaseUser.uid,
+          displayName: resolvedName.slice(0, 28),
+          ageTier: remoteProfile?.ageTier ?? current.ageTier,
+          dailyProblemGoal:
+            remoteProfile?.dailyProblemGoal ??
+            current.dailyProblemGoal ??
+            DAILY_PROBLEM_GOAL,
+          sessionKind: 'authenticated',
+          authProvider: 'email',
+          email: firebaseUser.email ?? remoteProfile?.email ?? current.email,
+        };
+        profileRef.current = nextProfile;
+        setProfile(nextProfile);
+        saveProfile(nextProfile);
+      } else {
+        const current = profileRef.current;
+        if (current.sessionKind === 'authenticated' || current.uid) {
+          const guestProfile: StudentProfile = {
+            ...current,
+            uid: null,
+            sessionKind: 'guest',
+            authProvider: 'guest',
+            email: null,
+          };
+          profileRef.current = guestProfile;
+          setProfile(guestProfile);
+          saveProfile(guestProfile);
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const achievementEvaluation = useMemo(
@@ -222,14 +417,39 @@ export default function NumbercraftApp() {
     };
   }, []);
 
+  const isGameLockedNow = useCallback(
+    (gameId: PlayableGameId) => {
+      const signedIn =
+        profileRef.current.sessionKind === 'authenticated' &&
+        Boolean(profileRef.current.uid);
+      const trials = computeEffectiveGuestTrials(
+        storedGuestTrialsRef.current,
+        matchesRef.current,
+        dailyRef.current
+      );
+      return isGuestGameLocked({
+        isSignedIn: signedIn,
+        gameId,
+        trialUsage: trials,
+      });
+    },
+    []
+  );
+
   /**
-   * Navigates between studio tabs. When leaving an active game arena, opens the
-   * End-of-Session reflection modal summarizing solved problems, accuracy, and
-   * progress toward the next Mastery Seal.
+   * Navigates between studio tabs. Enforces the 1-free-level-per-game guest
+   * trial gate when entering any game tab, and shows the End-of-Session
+   * reflection modal when leaving an active game arena.
    */
   const requestNavigateTab = useCallback(
     (nextTab: StudioTab) => {
       if (nextTab === activeTab) return;
+
+      const targetGameId = resolveGameIdForTab(nextTab, activeArithmeticGame);
+      if (targetGameId && isGameLockedNow(targetGameId)) {
+        openRegistrationGate(targetGameId);
+        return;
+      }
 
       if (isActiveGameTab(activeTab)) {
         const acc = sessionAccumulatorRef.current;
@@ -255,7 +475,10 @@ export default function NumbercraftApp() {
     },
     [
       achievementEvaluation,
+      activeArithmeticGame,
       activeTab,
+      isGameLockedNow,
+      openRegistrationGate,
       resetArenaSession,
       sessionElapsedSeconds,
     ]
@@ -275,11 +498,29 @@ export default function NumbercraftApp() {
     setPendingSessionSummary(null);
   }, []);
 
-  const handleUpdateProfile = useCallback((next: StudentProfile) => {
-    profileRef.current = next;
-    setProfile(next);
-    saveProfile(next);
+  const syncProfileToCloudIfSignedIn = useCallback((next: StudentProfile) => {
+    if (next.sessionKind === 'authenticated' && next.uid && next.email) {
+      void upsertUserProfileDoc({
+        uid: next.uid,
+        displayName: next.displayName,
+        email: next.email,
+        ageTier: next.ageTier,
+        dailyProblemGoal: next.dailyProblemGoal ?? DAILY_PROBLEM_GOAL,
+      }).catch(() => {
+        // Non-blocking cloud profile sync
+      });
+    }
   }, []);
+
+  const handleUpdateProfile = useCallback(
+    (next: StudentProfile) => {
+      profileRef.current = next;
+      setProfile(next);
+      saveProfile(next);
+      syncProfileToCloudIfSignedIn(next);
+    },
+    [syncProfileToCloudIfSignedIn]
+  );
 
   const handleClearLocalProgress = useCallback(() => {
     clearAllLocalProgress();
@@ -300,14 +541,18 @@ export default function NumbercraftApp() {
     });
   }, []);
 
-  const handleChangeTier = useCallback((tier: AgeTier) => {
-    setProfile((prev) => {
-      const next = { ...prev, ageTier: tier };
-      profileRef.current = next;
-      saveProfile(next);
-      return next;
-    });
-  }, []);
+  const handleChangeTier = useCallback(
+    (tier: AgeTier) => {
+      setProfile((prev) => {
+        const next = { ...prev, ageTier: tier };
+        profileRef.current = next;
+        saveProfile(next);
+        syncProfileToCloudIfSignedIn(next);
+        return next;
+      });
+    },
+    [syncProfileToCloudIfSignedIn]
+  );
 
   const handleChangeTheme = useCallback((nextTheme: ThemePreference) => {
     setThemePreference(nextTheme);
@@ -324,7 +569,11 @@ export default function NumbercraftApp() {
   // Follow OS prefers-color-scheme live when user selected System mode
   useEffect(() => {
     applyThemeToDocument(themePreference);
-    if (themePreference !== 'system' || typeof window === 'undefined' || !window.matchMedia) {
+    if (
+      themePreference !== 'system' ||
+      typeof window === 'undefined' ||
+      !window.matchMedia
+    ) {
       return;
     }
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -347,11 +596,87 @@ export default function NumbercraftApp() {
 
   const handleLaunchArithmetic = useCallback(
     (gameId: ArithmeticGameId) => {
+      if (isGameLockedNow(gameId)) {
+        openRegistrationGate(gameId);
+        return;
+      }
       setActiveArithmeticGame(gameId);
       resetArenaSession();
       setActiveTab('play-arithmetic');
     },
-    [resetArenaSession]
+    [isGameLockedNow, openRegistrationGate, resetArenaSession]
+  );
+
+  const handleLaunchAnyGame = useCallback(
+    (gameId: PlayableGameId) => {
+      if (isGameLockedNow(gameId)) {
+        openRegistrationGate(gameId);
+        return;
+      }
+      switch (gameId) {
+        case 'addition-attack':
+        case 'subtraction-sprint':
+        case 'multiplication-mastery':
+          handleLaunchArithmetic(gameId);
+          break;
+        case 'equation-foundry':
+          requestNavigateTab('play-equation-foundry');
+          break;
+        case 'odds-urns':
+          requestNavigateTab('play-odds-urns');
+          break;
+        case 'factor-grid':
+          requestNavigateTab('play-factor-grid');
+          break;
+        case 'daily-challenge':
+          requestNavigateTab('daily');
+          break;
+      }
+    },
+    [
+      handleLaunchArithmetic,
+      isGameLockedNow,
+      openRegistrationGate,
+      requestNavigateTab,
+    ]
+  );
+
+  const recordGuestTrialOrPersistCloudScore = useCallback(
+    (params: {
+      gameId: PlayableGameId;
+      tier: AgeTier;
+      score: number;
+      accuracyPercent: number;
+      dateKey: string;
+    }) => {
+      const currentProfile = profileRef.current;
+      const signedIn =
+        currentProfile.sessionKind === 'authenticated' &&
+        Boolean(currentProfile.uid);
+
+      if (signedIn && currentProfile.uid) {
+        void saveCloudGameScore({
+          uid: currentProfile.uid,
+          displayName: currentProfile.displayName,
+          gameId: params.gameId,
+          tier: params.tier,
+          score: params.score,
+          accuracyPercent: params.accuracyPercent,
+          dateKey: params.dateKey,
+        }).catch(() => {
+          // Non-blocking cloud score write (logged by handleFirestoreError)
+        });
+      } else {
+        const updatedTrials = incrementGuestTrialUsage(
+          storedGuestTrialsRef.current,
+          params.gameId
+        );
+        storedGuestTrialsRef.current = updatedTrials;
+        setStoredGuestTrials(updatedTrials);
+        saveGuestTrialUsage(updatedTrials);
+      }
+    },
+    []
   );
 
   const handleRecordMatch = useCallback(
@@ -378,6 +703,16 @@ export default function NumbercraftApp() {
       matchesRef.current = updatedMatches;
       setMatches(updatedMatches);
 
+      // Track 1-level guest trial usage OR save score to Cloud Leaderboard for logged-in users
+      const gameId = resolveGameIdFromMatch(enrichedRecord);
+      recordGuestTrialOrPersistCloudScore({
+        gameId,
+        tier: enrichedRecord.tier,
+        score: enrichedRecord.playerScore,
+        accuracyPercent: estimateMatchAccuracy(enrichedRecord),
+        dateKey: todayKey,
+      });
+
       if (qualifiesForDailyMilestone && !wasCompletedBefore) {
         setConfettiTriggerKey((k) => k + 1);
         playAchievementChime(profileRef.current.soundEnabled);
@@ -389,7 +724,10 @@ export default function NumbercraftApp() {
       if (record.arithmeticMeta) {
         acc.problemsSolved += record.arithmeticMeta.solved;
         acc.problemsAttempted += record.arithmeticMeta.attempted;
-      } else if (record.gameTitle === 'Equation Foundry' || record.gameTitle === 'Odds & Urns') {
+      } else if (
+        record.gameTitle === 'Equation Foundry' ||
+        record.gameTitle === 'Odds & Urns'
+      ) {
         acc.problemsSolved += 5;
         acc.problemsAttempted += 5;
       } else {
@@ -416,8 +754,9 @@ export default function NumbercraftApp() {
         );
         saveEarnedBadges(evaluation.earnedRecords);
 
-        // Trigger canvas confetti celebration + gentle achievement chime
         setConfettiTriggerKey((k) => k + 1);
+        setLatestUnlockedSealTitle(evaluation.newlyUnlocked[0].title);
+        setMasteryUnlockEventKey((k) => k + 1);
         playAchievementChime(profileRef.current.soundEnabled);
 
         if (!profileRef.current.featuredBadgeId) {
@@ -433,7 +772,7 @@ export default function NumbercraftApp() {
 
       return evaluation.newlyUnlocked;
     },
-    []
+    [recordGuestTrialOrPersistCloudScore]
   );
 
   const handleCompleteDaily = useCallback(
@@ -446,6 +785,18 @@ export default function NumbercraftApp() {
       const updatedMatches = appendMatch(dailyMatch);
       matchesRef.current = updatedMatches;
       setMatches(updatedMatches);
+
+      const attempts = Math.max(1, 3 + completion.mistakes);
+      const accuracyPercent = Math.round(
+        (completion.stepsSolved / attempts) * 100
+      );
+      recordGuestTrialOrPersistCloudScore({
+        gameId: 'daily-challenge',
+        tier: completion.tier,
+        score: completion.score,
+        accuracyPercent,
+        dateKey: completion.dateKey,
+      });
 
       const acc = sessionAccumulatorRef.current;
       acc.matchesRecorded += 1;
@@ -470,6 +821,8 @@ export default function NumbercraftApp() {
           Array.from(new Set([...prev, ...newIds]))
         );
         saveEarnedBadges(evaluation.earnedRecords);
+        setLatestUnlockedSealTitle(evaluation.newlyUnlocked[0].title);
+        setMasteryUnlockEventKey((k) => k + 1);
 
         if (!profileRef.current.featuredBadgeId) {
           const nextProfile: StudentProfile = {
@@ -482,7 +835,6 @@ export default function NumbercraftApp() {
         }
       }
 
-      // Trigger celebratory canvas confetti + gentle completion chime on Daily solve or new badge
       if (completion.solved || evaluation.newlyUnlocked.length > 0) {
         setConfettiTriggerKey((k) => k + 1);
         playAchievementChime(profileRef.current.soundEnabled);
@@ -490,7 +842,7 @@ export default function NumbercraftApp() {
 
       return evaluation.newlyUnlocked;
     },
-    []
+    [recordGuestTrialOrPersistCloudScore]
   );
 
   const handleLoadSampleMatches = useCallback(() => {
@@ -550,6 +902,20 @@ export default function NumbercraftApp() {
     });
   }, []);
 
+  const handleChangeDailyGoal = useCallback(
+    (nextGoal: number) => {
+      const clamped = clampDailyProblemGoal(nextGoal);
+      setProfile((prev) => {
+        const updated: StudentProfile = { ...prev, dailyProblemGoal: clamped };
+        profileRef.current = updated;
+        saveProfile(updated);
+        syncProfileToCloudIfSignedIn(updated);
+        return updated;
+      });
+    },
+    [syncProfileToCloudIfSignedIn]
+  );
+
   return (
     <div className="paper-grid flex min-h-screen flex-col">
       <a
@@ -578,6 +944,9 @@ export default function NumbercraftApp() {
         earnedCount={achievementEvaluation.earnedCount}
         totalCount={achievementEvaluation.totalCount}
         onOpenNotebook={() => requestNavigateTab('notebook')}
+        unlockEventKey={masteryUnlockEventKey}
+        latestUnlockedTitle={latestUnlockedSealTitle}
+        isHydrated={hydrated}
       />
 
       <TopNav
@@ -587,7 +956,7 @@ export default function NumbercraftApp() {
         earnedSealCount={achievementEvaluation.earnedCount}
         themePreference={themePreference}
         onChangeTheme={handleChangeTheme}
-        onOpenAccount={() => setAccountOpen(true)}
+        onOpenAccount={() => openAccountModal({ section: 'profile' })}
       />
 
       {/* Subtle persistent top-right session timer while inside active game arenas */}
@@ -627,6 +996,8 @@ export default function NumbercraftApp() {
               <StudioHub
                 ageTier={profile.ageTier}
                 playerName={profile.displayName}
+                isSignedIn={isSignedIn}
+                guestLockedGames={guestLockedGames}
                 onChangeTier={handleChangeTier}
                 onLaunchFactorGrid={() => requestNavigateTab('play-factor-grid')}
                 onLaunchArithmetic={handleLaunchArithmetic}
@@ -639,6 +1010,7 @@ export default function NumbercraftApp() {
                 matches={matches}
                 matchesCount={matches.length}
                 dailyCompletions={dailyCompletions}
+                dailyProblemGoal={profile.dailyProblemGoal}
               />
             )}
 
@@ -671,8 +1043,11 @@ export default function NumbercraftApp() {
                 profile={profile}
                 matches={matches}
                 dailyCompletions={dailyCompletions}
+                onChangeDailyGoal={handleChangeDailyGoal}
                 onLaunchArithmetic={handleLaunchArithmetic}
+                onLaunchGame={handleLaunchAnyGame}
                 onOpenDaily={() => requestNavigateTab('daily')}
+                onOpenRegister={() => openRegistrationGate()}
                 onLoadSampleDashboard={handleLoadSampleDashboard}
                 onClearSampleDashboard={handleClearSampleMatches}
               />
@@ -699,6 +1074,8 @@ export default function NumbercraftApp() {
                   onOpenNotebook={() => requestNavigateTab('notebook')}
                   onRecordMatch={handleRecordMatch}
                   matches={matches}
+                  isGameLockedForGuest={(gid) => guestLockedGames[gid]}
+                  onRequireRegistration={(gid) => openRegistrationGate(gid)}
                 />
               </div>
             )}
@@ -724,6 +1101,10 @@ export default function NumbercraftApp() {
                     onOpenNotebook={() => requestNavigateTab('notebook')}
                     onRecordMatch={handleRecordMatch}
                     autoStart={autoStartParam}
+                    guestTrialLocked={guestLockedGames['factor-grid']}
+                    onRequireRegistration={() =>
+                      openRegistrationGate('factor-grid')
+                    }
                   />
                 </div>
               )}
@@ -746,6 +1127,10 @@ export default function NumbercraftApp() {
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
                   onRecordMatch={handleRecordMatch}
+                  guestTrialLocked={guestLockedGames['equation-foundry']}
+                  onRequireRegistration={() =>
+                    openRegistrationGate('equation-foundry')
+                  }
                 />
               </div>
             )}
@@ -768,6 +1153,10 @@ export default function NumbercraftApp() {
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
                   onRecordMatch={handleRecordMatch}
+                  guestTrialLocked={guestLockedGames['odds-urns']}
+                  onRequireRegistration={() =>
+                    openRegistrationGate('odds-urns')
+                  }
                 />
               </div>
             )}
@@ -776,7 +1165,9 @@ export default function NumbercraftApp() {
               <OnlineRoomsPreview
                 ageTier={profile.ageTier}
                 profile={profile}
-                onOpenAccount={() => setAccountOpen(true)}
+                onOpenAccount={() =>
+                  openAccountModal({ section: 'auth', authMode: 'signup' })
+                }
                 onLaunchLocalFactorGrid={() =>
                   requestNavigateTab('play-factor-grid')
                 }
@@ -834,8 +1225,12 @@ export default function NumbercraftApp() {
         open={accountOpen}
         onClose={() => {
           setAccountOpen(false);
+          setRegistrationGateGameTitle(null);
           setRecentlyUnlockedBadgeIds([]);
         }}
+        initialSection={accountInitialSection}
+        initialAuthMode={accountInitialAuthMode}
+        registrationGateGameTitle={registrationGateGameTitle}
         profile={profile}
         matchCount={matches.length}
         achievementEvaluation={achievementEvaluation}

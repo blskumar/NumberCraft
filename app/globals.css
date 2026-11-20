@@ -100,7 +100,8 @@ html[data-theme="dark"] .bg-\[\#EFF5FF\] {
   background-color: rgba(37, 99, 235, 0.18) !important;
 }
 
-html[data-theme="dark"] .bg-\[\#ECFDF5\] {
+html[data-theme="dark"] .bg-\[\#ECFDF5\],
+html[data-theme="dark"] .bg-\[\#F2FBF7\] {
   background-color: rgba(16, 185, 129, 0.16) !important;
 }
 
@@ -109,8 +110,9 @@ html[data-theme="dark"] .bg-\[\#FEF3C7\] {
   background-color: rgba(217, 119, 6, 0.18) !important;
 }
 
-html[data-theme="dark"] .bg-\[\#FFF1F2\] {
-  background-color: rgba(225, 29, 72, 0.18) !important;
+html[data-theme="dark"] .bg-\[\#FFF1F2\],
+html[data-theme="dark"] .bg-\[\#FFF5F7\] {
+  background-color: rgba(225, 29, 72, 0.16) !important;
 }
 
 /* Primary & secondary inks -> crisp warm off-white & cool slate */
@@ -178,8 +180,325 @@ html[data-theme="dark"] .border-\[\#D4B88C\] {
   border-color: rgba(251, 191, 36, 0.35) !important;
 }
 
+html[data-theme="dark"] .border-\[\#FECDD3\] {
+  border-color: rgba(251, 113, 133, 0.38) !important;
+}
+
+html[data-theme="dark"] .border-\[\#D1FAE5\] {
+  border-color: rgba(52, 211, 153, 0.38) !important;
+}
+
 /* Tactile button bottom bevel shadows softened in dark mode */
 html[data-theme="dark"] [class*="shadow-\[0_2px_0_"],
 html[data-theme="dark"] [class*="shadow-\[0_3px_0_"] {
   box-shadow: 0 2px 0 #0A0E14 !important;
+}
+
+/* Circular progress ring neutral track in dark mode */
+html[data-theme="dark"] .stroke-\[\#EAE3D5\] {
+  stroke: #2B3748 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Daily Streak Line Chart — Celebratory "Growing" Highlight Animation        */
+/* -------------------------------------------------------------------------- */
+@keyframes streakChartCardGrow {
+  0% {
+    transform: translateY(4px) scale(0.992);
+    border-color: #10B981;
+    box-shadow:
+      0 0 0 0 rgba(16, 185, 129, 0.34),
+      0 12px 30px -10px rgba(4, 120, 87, 0.24);
+  }
+  38% {
+    transform: translateY(-2px) scale(1.008);
+    border-color: #059669;
+    box-shadow:
+      0 0 0 7px rgba(16, 185, 129, 0.14),
+      0 18px 36px -12px rgba(4, 120, 87, 0.28);
+  }
+  72% {
+    transform: translateY(0) scale(1.002);
+    border-color: #34D399;
+    box-shadow:
+      0 0 0 3px rgba(16, 185, 129, 0.08),
+      0 12px 28px -12px rgba(28, 35, 43, 0.12);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    border-color: #E2DCCF;
+    box-shadow:
+      0 1px 2px rgba(28, 35, 43, 0.04),
+      0 10px 26px -12px rgba(28, 35, 43, 0.09);
+  }
+}
+
+@keyframes streakChartCardGrowDark {
+  0% {
+    transform: translateY(4px) scale(0.992);
+    border-color: #34D399;
+    box-shadow:
+      0 0 0 0 rgba(52, 211, 153, 0.36),
+      0 14px 32px -10px rgba(16, 185, 129, 0.34);
+  }
+  38% {
+    transform: translateY(-2px) scale(1.008);
+    border-color: #34D399;
+    box-shadow:
+      0 0 0 7px rgba(52, 211, 153, 0.16),
+      0 20px 40px -12px rgba(16, 185, 129, 0.32);
+  }
+  72% {
+    transform: translateY(0) scale(1.002);
+    border-color: rgba(52, 211, 153, 0.65);
+    box-shadow:
+      0 0 0 3px rgba(52, 211, 153, 0.08),
+      0 12px 28px -12px rgba(0, 0, 0, 0.55);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    border-color: #2A3646;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 12px 28px -12px rgba(0, 0, 0, 0.55);
+  }
+}
+
+@keyframes streakCanvasGrowUp {
+  0% {
+    transform: scaleY(0.76) translateY(10px);
+    opacity: 0.65;
+  }
+  58% {
+    transform: scaleY(1.025) translateY(-1px);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleY(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes streakCurveGlow {
+  0% {
+    filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0));
+  }
+  40% {
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.62));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0));
+  }
+}
+
+@keyframes streakGrowthRibbonSweep {
+  0% {
+    transform: scaleX(0);
+    opacity: 0.95;
+  }
+  65% {
+    transform: scaleX(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+@keyframes streakMilestonePop {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.4;
+  }
+  55% {
+    transform: scale(1.24);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes streakMilestoneHaloRipple {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
+.streak-chart-growing {
+  animation: streakChartCardGrow 1.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html[data-theme="dark"] .streak-chart-growing {
+  animation: streakChartCardGrowDark 1.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.streak-chart-growing .streak-chart-canvas {
+  transform-origin: bottom center;
+  animation: streakCanvasGrowUp 0.95s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.streak-chart-growing .recharts-line-curve {
+  animation: streakCurveGlow 1.5s ease-out both;
+}
+
+.streak-growth-ribbon {
+  transform-origin: left center;
+  animation: streakGrowthRibbonSweep 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.streak-chart-growing .streak-milestone-node {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: streakMilestonePop 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.streak-chart-growing .streak-milestone-ripple {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: streakMilestoneHaloRipple 1.25s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mastery Progress Bar — Subtle Badge Unlock Entrance, Pulse & Glow          */
+/* -------------------------------------------------------------------------- */
+@keyframes masteryBannerGlow {
+  0% {
+    background-color: rgba(245, 241, 232, 0.95);
+    border-bottom-color: #E5E0D5;
+    box-shadow: 0 0 0 0 rgba(180, 83, 9, 0);
+  }
+  26% {
+    background-color: rgba(254, 247, 229, 0.98);
+    border-bottom-color: #D97706;
+    box-shadow: 0 3px 16px -4px rgba(180, 83, 9, 0.28);
+  }
+  62% {
+    background-color: rgba(250, 245, 234, 0.97);
+    border-bottom-color: #E5B971;
+    box-shadow: 0 2px 10px -4px rgba(29, 78, 216, 0.16);
+  }
+  100% {
+    background-color: rgba(245, 241, 232, 0.95);
+    border-bottom-color: #E5E0D5;
+    box-shadow: 0 0 0 0 rgba(180, 83, 9, 0);
+  }
+}
+
+@keyframes masteryBannerGlowDark {
+  0% {
+    background-color: #131B24;
+    border-bottom-color: #2B3748;
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+  26% {
+    background-color: #1B2532;
+    border-bottom-color: rgba(251, 191, 36, 0.65);
+    box-shadow: 0 3px 18px -4px rgba(251, 191, 36, 0.28);
+  }
+  62% {
+    background-color: #17202B;
+    border-bottom-color: rgba(96, 165, 250, 0.45);
+    box-shadow: 0 2px 12px -4px rgba(59, 130, 246, 0.22);
+  }
+  100% {
+    background-color: #131B24;
+    border-bottom-color: #2B3748;
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+
+@keyframes masteryTrackPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0);
+  }
+  30% {
+    box-shadow:
+      0 0 0 3px rgba(217, 119, 6, 0.24),
+      0 0 12px 1px rgba(29, 78, 216, 0.24);
+  }
+  65% {
+    box-shadow:
+      0 0 0 2px rgba(217, 119, 6, 0.12),
+      0 0 8px 0 rgba(29, 78, 216, 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0);
+  }
+}
+
+@keyframes masteryTrackPulseComplete {
+  0% {
+    box-shadow: 0 0 0 0 rgba(4, 120, 87, 0);
+  }
+  30% {
+    box-shadow:
+      0 0 0 3px rgba(16, 185, 129, 0.3),
+      0 0 14px 1px rgba(16, 185, 129, 0.28);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(4, 120, 87, 0);
+  }
+}
+
+@keyframes masteryFillSheen {
+  0% {
+    transform: translateX(-115%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateX(220%);
+    opacity: 0;
+  }
+}
+
+.mastery-bar-unlock-glow {
+  animation: masteryBannerGlow 2.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html[data-theme="dark"] .mastery-bar-unlock-glow {
+  animation: masteryBannerGlowDark 2.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.mastery-track-unlock-pulse {
+  animation: masteryTrackPulse 1.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.mastery-track-unlock-pulse-complete {
+  animation: masteryTrackPulseComplete 1.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.mastery-fill-sheen {
+  animation: masteryFillSheen 1.25s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streak-chart-growing,
+  html[data-theme="dark"] .streak-chart-growing,
+  .streak-chart-growing .streak-chart-canvas,
+  .streak-chart-growing .recharts-line-curve,
+  .streak-growth-ribbon,
+  .streak-chart-growing .streak-milestone-node,
+  .streak-chart-growing .streak-milestone-ripple,
+  .mastery-bar-unlock-glow,
+  html[data-theme="dark"] .mastery-bar-unlock-glow,
+  .mastery-track-unlock-pulse,
+  .mastery-track-unlock-pulse-complete,
+  .mastery-fill-sheen {
+    animation: none !important;
+    transform: none !important;
+  }
 }

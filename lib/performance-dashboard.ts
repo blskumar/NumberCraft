@@ -131,6 +131,85 @@ export interface DailyConsistency30DayData {
   endDateLabel: string;
 }
 
+export type DailyGoalRateStatus = 'met' | 'partial' | 'missed';
+
+export interface DailyGoalRateDayPoint {
+  index: number;
+  dateKey: string;
+  dateLabel: string;
+  shortDay: string;
+  isToday: boolean;
+  status: DailyGoalRateStatus;
+  completionRatePercent: number;
+  rolling7DayRatePercent: number;
+  stepsSolved: number;
+  editionNumber: number | null;
+  archetypeTitle: string | null;
+  score: number;
+}
+
+export interface DailyGoalRatePeriodBucket {
+  periodIndex: number;
+  label: string;
+  rangeLabel: string;
+  daysMet: number;
+  partialDays: number;
+  totalDays: number;
+  completionRatePercent: number;
+  avgDailyRatePercent: number;
+}
+
+export interface DailyGoalCompletionRate30DayData {
+  points: DailyGoalRateDayPoint[];
+  periodBuckets: DailyGoalRatePeriodBucket[];
+  daysMet: number;
+  partialDays: number;
+  missedDays: number;
+  overallCompletionRatePercent: number;
+  avgDailyRatePercent: number;
+  last7DaysRatePercent: number;
+  bestBlockRatePercent: number;
+  startDateLabel: string;
+  endDateLabel: string;
+}
+
+export interface StreakMasteryMilestone {
+  streakDay: number;
+  title: string;
+  shortLabel: string;
+}
+
+export const STREAK_MASTERY_MILESTONES: readonly StreakMasteryMilestone[] = [
+  {
+    streakDay: 3,
+    title: 'Three-Day Scholar',
+    shortLabel: '3d Seal',
+  },
+  {
+    streakDay: 7,
+    title: 'Weekly Tactician',
+    shortLabel: '7d Mastery',
+  },
+  {
+    streakDay: 14,
+    title: 'Fortnight Savant',
+    shortLabel: '14d Mastery',
+  },
+  {
+    streakDay: 30,
+    title: 'Studio Grandmaster',
+    shortLabel: '30d Mastery',
+  },
+] as const;
+
+export function getStreakMasteryMilestone(
+  streakLength: number
+): StreakMasteryMilestone | null {
+  return (
+    STREAK_MASTERY_MILESTONES.find((m) => m.streakDay === streakLength) ?? null
+  );
+}
+
 export interface DailyStreakDurationPoint {
   index: number;
   dateKey: string;
@@ -141,6 +220,8 @@ export interface DailyStreakDurationPoint {
   streakLength: number;
   isPeakPoint: boolean;
   inPeakPeriod: boolean;
+  isMasteryMilestone: boolean;
+  milestone: StreakMasteryMilestone | null;
   editionNumber: number | null;
   archetypeTitle: string | null;
   score: number;
@@ -157,6 +238,8 @@ export interface PeakStreakPeriod {
 export interface DailyStreakTrendData {
   points: DailyStreakDurationPoint[];
   peakPeriods: PeakStreakPeriod[];
+  milestoneDays: DailyStreakDurationPoint[];
+  nextMilestoneTarget: StreakMasteryMilestone | null;
   peakStreakDuration: number;
   currentStreakDuration: number;
   averageRunLength: number;
@@ -164,6 +247,94 @@ export interface DailyStreakTrendData {
   windowDays: number;
   startDateLabel: string;
   endDateLabel: string;
+}
+
+export type StreakGrowthReason =
+  | 'mastery-milestone'
+  | 'daily-milestone-arena'
+  | 'consecutive-streak'
+  | 'daily-goal-success';
+
+export interface StreakGrowthTriggerSnapshot {
+  currentStreakDuration: number;
+  milestoneCount: number;
+  dailyGoalMetToday: boolean;
+  dailyMilestoneCompletedToday: boolean;
+}
+
+export interface StreakGrowthEvent {
+  triggered: boolean;
+  reason: StreakGrowthReason | null;
+  bannerText: string | null;
+}
+
+/**
+ * Detects whether a new daily Mastery Milestone, Daily Milestone arena win,
+ * consecutive streak increase, or Daily Goal success was just recorded so the
+ * streak line chart can play its celebratory CSS "growing" highlight animation.
+ */
+export function detectStreakGrowthEvent(
+  prev: StreakGrowthTriggerSnapshot | null,
+  next: StreakGrowthTriggerSnapshot
+): StreakGrowthEvent {
+  if (!prev) {
+    if (next.milestoneCount > 0 && next.currentStreakDuration >= 3) {
+      return {
+        triggered: true,
+        reason: 'mastery-milestone',
+        bannerText: `Mastery Milestone active (${next.currentStreakDuration}d streak) — curve highlighted!`,
+      };
+    }
+    if (next.dailyMilestoneCompletedToday) {
+      return {
+        triggered: true,
+        reason: 'daily-milestone-arena',
+        bannerText: 'Today’s Daily Milestone completed — 1.5× momentum active!',
+      };
+    }
+    if (next.dailyGoalMetToday) {
+      return {
+        triggered: true,
+        reason: 'daily-goal-success',
+        bannerText: 'Daily Goal target met — streak momentum highlighted!',
+      };
+    }
+    return { triggered: false, reason: null, bannerText: null };
+  }
+
+  if (next.milestoneCount > prev.milestoneCount) {
+    return {
+      triggered: true,
+      reason: 'mastery-milestone',
+      bannerText: `New Mastery Milestone recorded (${next.currentStreakDuration}d streak)!`,
+    };
+  }
+  if (next.dailyMilestoneCompletedToday && !prev.dailyMilestoneCompletedToday) {
+    return {
+      triggered: true,
+      reason: 'daily-milestone-arena',
+      bannerText: 'Daily Milestone Arena completed — 1.5× streak boost recorded!',
+    };
+  }
+  if (
+    next.currentStreakDuration > prev.currentStreakDuration &&
+    next.currentStreakDuration >= 2
+  ) {
+    return {
+      triggered: true,
+      reason: 'consecutive-streak',
+      bannerText: `Consecutive streak grew to ${next.currentStreakDuration} days!`,
+    };
+  }
+  if (next.dailyGoalMetToday && !prev.dailyGoalMetToday) {
+    return {
+      triggered: true,
+      reason: 'daily-goal-success',
+      bannerText: 'Daily Goal reached — consecutive goal momentum growing!',
+    };
+  }
+
+  return { triggered: false, reason: null, bannerText: null };
 }
 
 function toLocalDateKeyFromIso(iso: string): string | null {
@@ -510,6 +681,138 @@ export function buildDailyChallenge30DayFrequency(
   };
 }
 
+/**
+ * Computes a 30-day Daily Goal Completion Rate series directly from dailyCompletions.
+ * Each calendar day records 100% when solved (3/3 clues), partial progress percentage
+ * (stepsSolved / 3) when attempted without finishing, or 0% when missed, alongside
+ * trailing 7-day rolling completion rates and five 6-day block completion rates.
+ */
+export function buildDailyGoalCompletionRate30Day(
+  dailyCompletions: DailyChallengeCompletion[],
+  todayKey: string = getLocalDateKey()
+): DailyGoalCompletionRate30DayData {
+  const dailyByDate = new Map<string, DailyChallengeCompletion>();
+  for (const c of dailyCompletions) {
+    dailyByDate.set(c.dateKey, c);
+  }
+
+  const rawPoints: Omit<DailyGoalRateDayPoint, 'rolling7DayRatePercent'>[] = [];
+  let daysMet = 0;
+  let partialDays = 0;
+
+  for (let offset = -29; offset <= 0; offset += 1) {
+    const dateKey = shiftDateKey(todayKey, offset);
+    const parts = dateKey.split('-').map(Number);
+    const utcDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    const shortDay = utcDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      timeZone: 'UTC',
+    });
+    const entry = dailyByDate.get(dateKey);
+
+    let status: DailyGoalRateStatus = 'missed';
+    let completionRatePercent = 0;
+    let stepsSolved = 0;
+
+    if (entry?.solved) {
+      status = 'met';
+      completionRatePercent = 100;
+      stepsSolved = Math.max(3, entry.stepsSolved);
+      daysMet += 1;
+    } else if (entry) {
+      status = 'partial';
+      stepsSolved = Math.max(0, Math.min(3, Math.round(entry.stepsSolved)));
+      completionRatePercent = Math.min(
+        99,
+        Math.round((stepsSolved / 3) * 100)
+      );
+      partialDays += 1;
+    }
+
+    rawPoints.push({
+      index: offset + 30,
+      dateKey,
+      dateLabel: formatMonthDayFromDateKey(dateKey),
+      shortDay,
+      isToday: dateKey === todayKey,
+      status,
+      completionRatePercent,
+      stepsSolved,
+      editionNumber: entry?.editionNumber ?? null,
+      archetypeTitle: entry?.archetypeTitle ?? null,
+      score: entry?.score ?? 0,
+    });
+  }
+
+  const points: DailyGoalRateDayPoint[] = rawPoints.map((pt, idx) => {
+    const startIdx = Math.max(0, idx - 6);
+    const windowSlice = rawPoints.slice(startIdx, idx + 1);
+    const metInWindow = windowSlice.filter((p) => p.status === 'met').length;
+    const rolling7DayRatePercent = Math.round(
+      (metInWindow / windowSlice.length) * 100
+    );
+    return {
+      ...pt,
+      rolling7DayRatePercent,
+    };
+  });
+
+  const periodBuckets: DailyGoalRatePeriodBucket[] = [];
+  const bucketSize = 6;
+  for (let b = 0; b < 5; b += 1) {
+    const slice = points.slice(b * bucketSize, (b + 1) * bucketSize);
+    const bucketMet = slice.filter((p) => p.status === 'met').length;
+    const bucketPartial = slice.filter((p) => p.status === 'partial').length;
+    const avgDailyRatePercent = Math.round(
+      slice.reduce((sum, p) => sum + p.completionRatePercent, 0) / slice.length
+    );
+    const first = slice[0];
+    const last = slice[slice.length - 1];
+    periodBuckets.push({
+      periodIndex: b + 1,
+      label: `Days ${b * bucketSize + 1}–${(b + 1) * bucketSize}`,
+      rangeLabel:
+        first && last
+          ? `${first.dateLabel} – ${last.dateLabel}`
+          : `Block ${b + 1}`,
+      daysMet: bucketMet,
+      partialDays: bucketPartial,
+      totalDays: slice.length,
+      completionRatePercent: Math.round((bucketMet / slice.length) * 100),
+      avgDailyRatePercent,
+    });
+  }
+
+  const missedDays = 30 - daysMet - partialDays;
+  const overallCompletionRatePercent = Math.round((daysMet / 30) * 100);
+  const avgDailyRatePercent = Math.round(
+    points.reduce((sum, p) => sum + p.completionRatePercent, 0) / 30
+  );
+  const last7Slice = points.slice(-7);
+  const last7DaysRatePercent = Math.round(
+    (last7Slice.filter((p) => p.status === 'met').length / last7Slice.length) *
+      100
+  );
+  const bestBlockRatePercent = periodBuckets.reduce(
+    (max, b) => Math.max(max, b.completionRatePercent),
+    0
+  );
+
+  return {
+    points,
+    periodBuckets,
+    daysMet,
+    partialDays,
+    missedDays,
+    overallCompletionRatePercent,
+    avgDailyRatePercent,
+    last7DaysRatePercent,
+    bestBlockRatePercent,
+    startDateLabel: points[0]?.dateLabel ?? todayKey,
+    endDateLabel: points[points.length - 1]?.dateLabel ?? todayKey,
+  };
+}
+
 export function buildDailyStreakDurationSeries(
   dailyCompletions: DailyChallengeCompletion[],
   todayKey: string = getLocalDateKey(),
@@ -535,7 +838,10 @@ export function buildDailyStreakDurationSeries(
     probe = shiftDateKey(probe, -1);
   }
 
-  const rawPoints: Omit<DailyStreakDurationPoint, 'isPeakPoint' | 'inPeakPeriod'>[] = [];
+  const rawPoints: Omit<
+    DailyStreakDurationPoint,
+    'isPeakPoint' | 'inPeakPeriod' | 'isMasteryMilestone' | 'milestone'
+  >[] = [];
   let running = priorStreak;
   let peakStreakDuration = 0;
   let activeStreakDays = 0;
@@ -630,11 +936,21 @@ export function buildDailyStreakDurationSeries(
     }
   }
 
-  const points: DailyStreakDurationPoint[] = rawPoints.map((pt, idx) => ({
-    ...pt,
-    isPeakPoint: peakStreakDuration > 0 && pt.streakLength === peakStreakDuration,
-    inPeakPeriod: peakRunIndexSet.has(idx),
-  }));
+  const points: DailyStreakDurationPoint[] = rawPoints.map((pt, idx) => {
+    const milestone = pt.solved
+      ? getStreakMasteryMilestone(pt.streakLength)
+      : null;
+    return {
+      ...pt,
+      isPeakPoint:
+        peakStreakDuration > 0 && pt.streakLength === peakStreakDuration,
+      inPeakPeriod: peakRunIndexSet.has(idx),
+      isMasteryMilestone: milestone !== null,
+      milestone,
+    };
+  });
+
+  const milestoneDays = points.filter((p) => p.isMasteryMilestone);
 
   const lastPt = points[points.length - 1];
   const prevPt = points.length >= 2 ? points[points.length - 2] : null;
@@ -642,6 +958,11 @@ export function buildDailyStreakDurationSeries(
     lastPt && lastPt.streakLength > 0
       ? lastPt.streakLength
       : prevPt?.streakLength ?? 0;
+
+  const nextMilestoneTarget =
+    STREAK_MASTERY_MILESTONES.find(
+      (m) => m.streakDay > currentStreakDuration
+    ) ?? null;
 
   const averageRunLength =
     runs.length > 0
@@ -655,6 +976,8 @@ export function buildDailyStreakDurationSeries(
   return {
     points,
     peakPeriods,
+    milestoneDays,
+    nextMilestoneTarget,
     peakStreakDuration,
     currentStreakDuration,
     averageRunLength,

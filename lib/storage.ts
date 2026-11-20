@@ -1,3 +1,4 @@
+import { clampDailyProblemGoal, DAILY_PROBLEM_GOAL } from './daily-goal';
 import type {
   AchievementId,
   DailyChallengeCompletion,
@@ -29,10 +30,12 @@ const VALID_BADGE_IDS = new Set<AchievementId>([
 ]);
 
 export const DEFAULT_PROFILE: StudentProfile = {
+  uid: null,
   displayName: 'Guest Explorer',
   ageTier: 'challengers',
   soundEnabled: true,
   themePreference: 'system',
+  dailyProblemGoal: DAILY_PROBLEM_GOAL,
   sessionKind: 'guest',
   authProvider: 'guest',
   email: null,
@@ -52,22 +55,23 @@ export function loadProfile(): StudentProfile {
         ? (parsed.featuredBadgeId as AchievementId)
         : null;
     const sessionKind =
-      parsed.sessionKind === 'signed-in-preview'
-        ? 'signed-in-preview'
-        : 'guest';
-    const authProvider =
-      sessionKind === 'guest'
-        ? 'guest'
-        : parsed.authProvider === 'email'
-          ? 'email'
-          : 'google';
+      parsed.sessionKind === 'authenticated' ? 'authenticated' : 'guest';
+    const authProvider = sessionKind === 'authenticated' ? 'email' : 'guest';
     const themePreference =
       parsed.themePreference === 'light' ||
       parsed.themePreference === 'dark' ||
       parsed.themePreference === 'system'
         ? parsed.themePreference
         : DEFAULT_PROFILE.themePreference;
+    const dailyProblemGoal =
+      typeof parsed.dailyProblemGoal === 'number'
+        ? clampDailyProblemGoal(parsed.dailyProblemGoal)
+        : DAILY_PROBLEM_GOAL;
     return {
+      uid:
+        sessionKind === 'authenticated' && typeof parsed.uid === 'string'
+          ? parsed.uid.slice(0, 128)
+          : null,
       displayName:
         typeof parsed.displayName === 'string' && parsed.displayName.trim()
           ? parsed.displayName.trim().slice(0, 28)
@@ -83,10 +87,11 @@ export function loadProfile(): StudentProfile {
           ? parsed.soundEnabled
           : DEFAULT_PROFILE.soundEnabled,
       themePreference,
+      dailyProblemGoal,
       sessionKind,
       authProvider,
       email:
-        sessionKind === 'signed-in-preview' && typeof parsed.email === 'string'
+        sessionKind === 'authenticated' && typeof parsed.email === 'string'
           ? parsed.email.slice(0, 120)
           : null,
       sharedDeviceMode: Boolean(parsed.sharedDeviceMode),

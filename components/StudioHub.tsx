@@ -12,6 +12,7 @@ import {
   Flame,
   Grid3X3,
   Layers,
+  Lock,
   Moon,
   Sun,
   Sunrise,
@@ -43,6 +44,7 @@ import {
 } from '@/lib/daily-milestone';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { getStudioGreeting } from '@/lib/greeting';
+import type { PlayableGameId } from '@/lib/guest-trial';
 import type {
   AgeTier,
   ArithmeticGameId,
@@ -53,6 +55,8 @@ import type {
 interface StudioHubProps {
   ageTier: AgeTier;
   playerName?: string;
+  isSignedIn?: boolean;
+  guestLockedGames?: Partial<Record<PlayableGameId, boolean>>;
   onChangeTier: (tier: AgeTier) => void;
   onLaunchFactorGrid: () => void;
   onLaunchArithmetic: (gameId: ArithmeticGameId) => void;
@@ -63,6 +67,7 @@ interface StudioHubProps {
   matches: MatchRecord[];
   matchesCount: number;
   dailyCompletions: DailyChallengeCompletion[];
+  dailyProblemGoal?: number;
 }
 
 const TIER_ORDER: AgeTier[] = ['explorers', 'challengers', 'strategists'];
@@ -83,6 +88,8 @@ const MARBLE_SPECS = [
 export default function StudioHub({
   ageTier,
   playerName,
+  isSignedIn = false,
+  guestLockedGames = {},
   onChangeTier,
   onLaunchFactorGrid,
   onLaunchArithmetic,
@@ -93,6 +100,7 @@ export default function StudioHub({
   matches,
   matchesCount,
   dailyCompletions,
+  dailyProblemGoal,
 }: StudioHubProps) {
   const activeSpec = TIER_SPECS[ageTier];
   const todayKey = useMemo(() => getLocalDateKey(), []);
@@ -110,8 +118,9 @@ export default function StudioHub({
         matches,
         dailyCompletions,
         todayKey,
+        dailyProblemGoal,
       }),
-    [matches, dailyCompletions, todayKey]
+    [matches, dailyCompletions, todayKey, dailyProblemGoal]
   );
   const dailyMilestoneStatus = useMemo(
     () => evaluateDailyMilestone(matches, todayKey),
@@ -317,14 +326,26 @@ export default function StudioHub({
             <button
               type="button"
               data-testid="open-daily-challenge-btn"
+              data-guest-locked={
+                !isSignedIn && guestLockedGames['daily-challenge']
+                  ? 'true'
+                  : 'false'
+              }
               onClick={onOpenDaily}
               className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold whitespace-nowrap transition-all ${
-                dailyStats.solvedToday
-                  ? 'border border-[#047857]/40 bg-[#ECFDF5] text-[#047857] hover:bg-[#D1FAE5]'
-                  : 'btn-cobalt'
+                !isSignedIn && guestLockedGames['daily-challenge']
+                  ? 'border border-[#1D4ED8]/45 bg-[#EFF5FF] text-[#1D4ED8] hover:bg-[#DBEAFE]'
+                  : dailyStats.solvedToday
+                    ? 'border border-[#047857]/40 bg-[#ECFDF5] text-[#047857] hover:bg-[#D1FAE5]'
+                    : 'btn-cobalt'
               }`}
             >
-              {dailyStats.solvedToday ? (
+              {!isSignedIn && guestLockedGames['daily-challenge'] ? (
+                <>
+                  <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Register Free to Continue
+                </>
+              ) : dailyStats.solvedToday ? (
                 <>
                   <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
                   View Today’s Stamp
@@ -499,14 +520,37 @@ export default function StudioHub({
                 </div>
 
                 <div className="px-6 pb-6">
+                  {!isSignedIn && (
+                    <p className="mb-2 text-[11px] font-medium text-[#5A6572]">
+                      {guestLockedGames[gameId]
+                        ? '1 free guest level used · Free email registration unlocks unlimited play'
+                        : 'Includes 1 free guest level · Register free for unlimited play'}
+                    </p>
+                  )}
                   <button
                     type="button"
                     data-testid={`launch-${gameId}`}
+                    data-guest-locked={
+                      !isSignedIn && guestLockedGames[gameId] ? 'true' : 'false'
+                    }
                     onClick={() => onLaunchArithmetic(gameId)}
-                    className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+                      !isSignedIn && guestLockedGames[gameId]
+                        ? 'border border-[#1D4ED8]/45 bg-[#EFF5FF] text-[#1D4ED8] hover:bg-[#DBEAFE]'
+                        : 'btn-cobalt'
+                    }`}
                   >
-                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    Play {game.title}
+                    {!isSignedIn && guestLockedGames[gameId] ? (
+                      <>
+                        <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        Register Free to Continue
+                      </>
+                    ) : (
+                      <>
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        Play {game.title}
+                      </>
+                    )}
                   </button>
                 </div>
               </article>
@@ -577,6 +621,13 @@ export default function StudioHub({
             </div>
 
             <div className="px-6 pb-6">
+              {!isSignedIn && (
+                <p className="mb-2 text-[11px] font-medium text-[#5A6572]">
+                  {guestLockedGames['factor-grid']
+                    ? '1 free guest level used · Free email registration unlocks unlimited play'
+                    : 'Includes 1 free guest level · Register free for unlimited play'}
+                </p>
+              )}
               <Tooltip
                 content="Play territorial divisor-capture strategy in Solo, vs. AI, or Pass-and-Play"
                 placement="top"
@@ -584,11 +635,30 @@ export default function StudioHub({
               >
                 <button
                   type="button"
+                  data-testid="launch-factor-grid"
+                  data-guest-locked={
+                    !isSignedIn && guestLockedGames['factor-grid']
+                      ? 'true'
+                      : 'false'
+                  }
                   onClick={onLaunchFactorGrid}
-                  className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+                    !isSignedIn && guestLockedGames['factor-grid']
+                      ? 'border border-[#1D4ED8]/45 bg-[#EFF5FF] text-[#1D4ED8] hover:bg-[#DBEAFE]'
+                      : 'btn-cobalt'
+                  }`}
                 >
-                  <Grid3X3 className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  Open Factor Grid
+                  {!isSignedIn && guestLockedGames['factor-grid'] ? (
+                    <>
+                      <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      Register Free to Continue
+                    </>
+                  ) : (
+                    <>
+                      <Grid3X3 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      Open Factor Grid
+                    </>
+                  )}
                 </button>
               </Tooltip>
             </div>
@@ -654,6 +724,13 @@ export default function StudioHub({
             </div>
 
             <div className="px-6 pb-6">
+              {!isSignedIn && (
+                <p className="mb-2 text-[11px] font-medium text-[#5A6572]">
+                  {guestLockedGames['equation-foundry']
+                    ? '1 free guest level used · Free email registration unlocks unlimited play'
+                    : 'Includes 1 free guest level · Register free for unlimited play'}
+                </p>
+              )}
               <Tooltip
                 content="Forge target numbers with PEMDAS tiles and compare against Solver AI"
                 placement="top"
@@ -662,11 +739,32 @@ export default function StudioHub({
                 <button
                   type="button"
                   data-testid="launch-equation-foundry"
+                  data-guest-locked={
+                    !isSignedIn && guestLockedGames['equation-foundry']
+                      ? 'true'
+                      : 'false'
+                  }
                   onClick={onLaunchEquationFoundry}
-                  className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+                    !isSignedIn && guestLockedGames['equation-foundry']
+                      ? 'border border-[#1D4ED8]/45 bg-[#EFF5FF] text-[#1D4ED8] hover:bg-[#DBEAFE]'
+                      : 'btn-cobalt'
+                  }`}
                 >
-                  <Calculator className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  Play Equation Foundry
+                  {!isSignedIn && guestLockedGames['equation-foundry'] ? (
+                    <>
+                      <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      Register Free to Continue
+                    </>
+                  ) : (
+                    <>
+                      <Calculator
+                        className="h-4 w-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                      Play Equation Foundry
+                    </>
+                  )}
                 </button>
               </Tooltip>
             </div>
@@ -723,6 +821,13 @@ export default function StudioHub({
             </div>
 
             <div className="px-6 pb-6">
+              {!isSignedIn && (
+                <p className="mb-2 text-[11px] font-medium text-[#5A6572]">
+                  {guestLockedGames['odds-urns']
+                    ? '1 free guest level used · Free email registration unlocks unlimited play'
+                    : 'Includes 1 free guest level · Register free for unlimited play'}
+                </p>
+              )}
               <Tooltip
                 content="Explore Marble Urn, Twin Dice, and Conditional Spinner chambers vs. EV Bot"
                 placement="top"
@@ -731,11 +836,29 @@ export default function StudioHub({
                 <button
                   type="button"
                   data-testid="launch-odds-urns"
+                  data-guest-locked={
+                    !isSignedIn && guestLockedGames['odds-urns']
+                      ? 'true'
+                      : 'false'
+                  }
                   onClick={onLaunchOddsUrns}
-                  className="btn-cobalt flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap"
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+                    !isSignedIn && guestLockedGames['odds-urns']
+                      ? 'border border-[#1D4ED8]/45 bg-[#EFF5FF] text-[#1D4ED8] hover:bg-[#DBEAFE]'
+                      : 'btn-cobalt'
+                  }`}
                 >
-                  <Dices className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  Play Odds &amp; Urns
+                  {!isSignedIn && guestLockedGames['odds-urns'] ? (
+                    <>
+                      <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      Register Free to Continue
+                    </>
+                  ) : (
+                    <>
+                      <Dices className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      Play Odds &amp; Urns
+                    </>
+                  )}
                 </button>
               </Tooltip>
             </div>
