@@ -1,5 +1,6 @@
 'use client';
 
+import ChartA11y from '@/components/ChartA11y';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid,
@@ -544,6 +545,7 @@ export default function DailyStreakTrendChart({
         key={`chart-canvas-${growthPulseKey}`}
         className="streak-chart-canvas mt-4 h-[260px] w-full"
       >
+              <ChartA11y label="Daily streak trend" data={trendData.points as never} />
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={trendData.points}

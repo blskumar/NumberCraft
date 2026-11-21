@@ -66,6 +66,13 @@ export default function DailyLeaderboardCard({
             Top 5 scores for Daily Edition #{snapshot.editionNumber} ·{' '}
             {snapshot.formattedDate} ({snapshot.archetypeTitle}).
           </p>
+          <p
+            data-testid="leaderboard-simulated-note"
+            className="mt-1 text-xs font-semibold text-[#46515E]"
+          >
+            Practice rivals (simulated): other names here are made-up
+            players for practice, not real students.
+          </p>
         </div>
 
         <div
@@ -131,7 +138,7 @@ export default function DailyLeaderboardCard({
               }
             >
               {snapshot.currentUserEntry
-                ? `#${snapshot.currentUserEntry.rank} of ${snapshot.totalCohortSize}`
+                ? `#${snapshot.currentUserEntry.rank} of ${snapshot.totalCohortSize} (with simulated rivals)`
                 : snapshot.currentUserSolvedToday
                   ? 'Solved (Other Tier)'
                   : 'Not Ranked Yet'}
@@ -221,6 +228,14 @@ export default function DailyLeaderboardCard({
                     {entry.isCurrentUser && (
                       <span className="font-mono text-[11px] font-semibold text-[#1D4ED8]">
                         (You)
+                      </span>
+                    )}
+                    {'isSimulated' in entry && entry.isSimulated === true && (
+                      <span
+                        data-testid="leaderboard-simulated-badge"
+                        className="rounded border border-[#D8D1C4] px-1 font-mono text-[11px] text-[#46515E]"
+                      >
+                        Practice rival (simulated)
                       </span>
                     )}
                   </div>

@@ -167,7 +167,7 @@ export default function MasteryNotebook({
             <p className="mt-2 font-mono text-3xl font-semibold text-[#1C232B] tabular-nums">
               {stat.value}
             </p>
-            <p className="mt-1 text-[11px] text-[#7A8490]">{stat.sub}</p>
+            <p className="mt-1 text-[11px] text-[#5A6572]">{stat.sub}</p>
           </div>
         ))}
       </section>

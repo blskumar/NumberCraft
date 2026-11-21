@@ -1280,7 +1280,7 @@ export default function ArithmeticArena({
               </div>
 
               {history.length === 0 ? (
-                <p className="mt-6 text-center text-xs text-[#7A8490]">
+                <p className="mt-6 text-center text-xs text-[#5A6572]">
                   Solved problems appear here in real time so you can spot
                   patterns and review misses immediately.
                 </p>

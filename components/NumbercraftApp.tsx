@@ -1004,8 +1004,6 @@ export default function NumbercraftApp() {
           <motion.div
             key={activeTab}
             id={activeTabA11y.containerId}
-            role="region"
-            aria-label={activeTabA11y.regionLabel}
             aria-roledescription={
               activeTabA11y.isGameArena ? 'interactive math game' : undefined
             }

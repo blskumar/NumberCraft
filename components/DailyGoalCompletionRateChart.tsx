@@ -1,5 +1,6 @@
 'use client';
 
+import ChartA11y from '@/components/ChartA11y';
 import { useState } from 'react';
 import {
   Bar,
@@ -186,7 +187,7 @@ export default function DailyGoalCompletionRateChart({
         <div
           role="tablist"
           aria-label="Daily goal completion rate view"
-          className="inline-flex items-center gap-1 self-start rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1 lg:self-auto"
+          className="inline-flex max-w-full flex-wrap items-center gap-1 self-start rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1 lg:self-auto"
         >
           <button
             type="button"
@@ -310,6 +311,7 @@ export default function DailyGoalCompletionRateChart({
 
       {/* Recharts Bar Chart */}
       <div className="mt-4 h-[240px] w-full">
+              <ChartA11y label="Daily goal completion rate" data={(granularity === 'daily' ? data.points : data.periodBuckets) as never} />
         <ResponsiveContainer width="100%" height="100%">
           {granularity === 'daily' ? (
             <BarChart

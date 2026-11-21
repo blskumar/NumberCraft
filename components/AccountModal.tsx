@@ -1054,7 +1054,7 @@ function AccountModalBody({
                       </label>
                       <div className="relative mt-1">
                         <Mail
-                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#7A8490]"
+                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#5A6572]"
                           aria-hidden="true"
                         />
                         <input
@@ -1090,7 +1090,7 @@ function AccountModalBody({
                       </div>
                       <div className="relative mt-1">
                         <Lock
-                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#7A8490]"
+                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#5A6572]"
                           aria-hidden="true"
                         />
                         <input
@@ -1108,7 +1108,7 @@ function AccountModalBody({
                           aria-label={
                             showPassword ? 'Hide password' : 'Show password'
                           }
-                          className="absolute right-2.5 top-2 text-[#7A8490] hover:text-[#1C232B]"
+                          className="absolute right-2.5 top-2 text-[#5A6572] hover:text-[#1C232B]"
                         >
                           {showPassword ? (
                             <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -1208,7 +1208,7 @@ function AccountModalBody({
                       </label>
                       <div className="relative mt-1">
                         <Mail
-                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#7A8490]"
+                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#5A6572]"
                           aria-hidden="true"
                         />
                         <input
@@ -1232,7 +1232,7 @@ function AccountModalBody({
                       </label>
                       <div className="relative mt-1">
                         <Lock
-                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#7A8490]"
+                          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#5A6572]"
                           aria-hidden="true"
                         />
                         <input
@@ -1250,7 +1250,7 @@ function AccountModalBody({
                           aria-label={
                             showPassword ? 'Hide password' : 'Show password'
                           }
-                          className="absolute right-2.5 top-2 text-[#7A8490] hover:text-[#1C232B]"
+                          className="absolute right-2.5 top-2 text-[#5A6572] hover:text-[#1C232B]"
                         >
                           {showPassword ? (
                             <EyeOff className="h-4 w-4" aria-hidden="true" />

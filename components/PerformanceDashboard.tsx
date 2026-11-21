@@ -1,5 +1,6 @@
 'use client';
 
+import ChartA11y from '@/components/ChartA11y';
 import { useMemo, useState } from 'react';
 import {
   Area,
@@ -433,7 +434,7 @@ export default function PerformanceDashboard({
                 {overview.accuracyDelta}% recent trend
               </span>
             ) : (
-              <span className="text-[#7A8490]">
+              <span className="text-[#5A6572]">
                 {overview.arithmeticSessionCount === 0
                   ? 'No rounds yet'
                   : 'Complete 2+ rounds for trend'}
@@ -453,7 +454,7 @@ export default function PerformanceDashboard({
           >
             {overview.totalProblemsSolved}
           </p>
-          <p className="mt-1 font-mono text-[11px] text-[#7A8490] tabular-nums">
+          <p className="mt-1 font-mono text-[11px] text-[#5A6572] tabular-nums">
             {overview.arithmeticSessionCount}{' '}
             {overview.arithmeticSessionCount === 1 ? 'session' : 'sessions'}
             {overview.avgPacePerMinute !== null
@@ -476,7 +477,7 @@ export default function PerformanceDashboard({
           >
             {overview.dailySolvedCount}
           </p>
-          <p className="mt-1 font-mono text-[11px] text-[#7A8490] tabular-nums">
+          <p className="mt-1 font-mono text-[11px] text-[#5A6572] tabular-nums">
             {overview.dailyAttemptedCount} attempted ·{' '}
             {overview.totalChallengesCompleted} total logs
           </p>
@@ -493,7 +494,7 @@ export default function PerformanceDashboard({
           >
             {overview.currentDailyStreak}d
           </p>
-          <p className="mt-1 font-mono text-[11px] text-[#7A8490] tabular-nums">
+          <p className="mt-1 font-mono text-[11px] text-[#5A6572] tabular-nums">
             Best streak {overview.bestDailyStreak}d
           </p>
         </div>
@@ -670,6 +671,7 @@ export default function PerformanceDashboard({
           </div>
         ) : (
           <div className="mt-4 h-[290px] w-full">
+              <ChartA11y label="Accuracy trend" data={accuracySeries as never} />
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
                 data={accuracySeries}
@@ -795,7 +797,7 @@ export default function PerformanceDashboard({
             <div
               role="tablist"
               aria-label="Completion history perspective"
-              className="flex items-center gap-1 rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1"
+              className="flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1"
             >
               <button
                 type="button"
@@ -885,6 +887,7 @@ export default function PerformanceDashboard({
             </div>
           ) : (
             <div className="mt-4 h-[250px] w-full">
+              <ChartA11y label="Daily challenge completion history" data={(historyView === 'cadence' ? completionHistory : dailyScoreSpeed) as never} />
               <ResponsiveContainer width="100%" height="100%">
                 {historyView === 'cadence' ? (
                   <BarChart
@@ -1021,6 +1024,7 @@ export default function PerformanceDashboard({
             </div>
 
             <div className="mt-4 h-[175px] w-full">
+              <ChartA11y label="Game breakdown" data={chartGameBreakdown as never} />
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={chartGameBreakdown}
