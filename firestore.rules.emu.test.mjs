@@ -1,68 +1,80 @@
+// Firestore rules tests against the emulator (no live project).
+// Run from a dir that has @firebase/rules-unit-testing + firebase installed:
+//   firebase emulators:exec --only firestore "node --test firestore.rules.emu.test.mjs"
+// (see functions/README.md). FIRESTORE_EMULATOR_HOST is set by emulators:exec.
 import { test, before, after } from 'node:test';
 import fs from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, collection, serverTimestamp } from 'firebase/firestore';
+
+const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8095').split(':');
 let env;
 before(async () => {
-  env = await initializeTestEnvironment({ projectId: 'demo-nc-fixb', firestore: { rules: fs.readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8091 } });
+  env = await initializeTestEnvironment({ projectId: 'demo-nc-rules', firestore: { rules: fs.readFileSync(process.env.RULES_PATH ?? 'firestore.rules', 'utf8'), host: HOST, port: Number(PORT) } });
   await env.withSecurityRulesDisabled(async (c) => {
-    for (const u of ['u1', 'u2']) await setDoc(doc(c.firestore(), 'users', u), { uid: u, displayName: 'Ann' + (u === 'u2' ? '2' : ''), email: u + '@b.co', ageTier: 'explorers', dailyProblemGoal: 10, createdAt: new Date(), updatedAt: new Date() });
+    const db = c.firestore();
+    for (const u of ['u1', 'u2']) await setDoc(doc(db, 'users', u), { uid: u, displayName: 'Ann' + (u === 'u2' ? '2' : ''), email: u + '@b.co', ageTier: 'explorers', dailyProblemGoal: 10, createdAt: new Date(), updatedAt: new Date() });
+    await setDoc(doc(db, 'gameScores', 'u1_addition-attack_2026-01-01'), { uid: 'u1', displayName: 'Ann', gameId: 'addition-attack', score: 100 });
+    await setDoc(doc(db, 'rounds', 'u1_r1'), { uid: 'u1', gameId: 'addition-attack', status: 'open' });
+    await setDoc(doc(db, 'scoreFlags', 'f1'), { uid: 'u1', reason: 'x' });
+    await setDoc(doc(db, 'rateLimits', 'u1'), { n: 1 });
   });
 });
 after(async () => { await env?.cleanup(); });
-const dk = (off = 0) => new Date(Date.now() + off * 864e5).toISOString().slice(0, 10);
+
 const ctx = (uid, o = {}) => env.authenticatedContext(uid, { email: uid + '@b.co', email_verified: true, ...o }).firestore();
 const anon = () => env.unauthenticatedContext().firestore();
-const id = (uid, g = 'addition-attack', d = dk()) => `${uid}_${g}_${d}`;
-const T = { 'addition-attack': 'Addition Attack', 'subtraction-sprint': 'Subtraction Sprint', 'multiplication-mastery': 'Multiplication Mastery', 'equation-foundry': 'Equation Foundry', 'odds-urns': 'Odds & Urns', 'factor-grid': 'Factor Grid', 'daily-challenge': 'Daily Math Challenge' };
-const score = (uid, o = {}) => ({ uid, displayName: uid === 'u2' ? 'Ann2' : 'Ann', gameId: 'addition-attack', gameTitle: T[o.gameId ?? 'addition-attack'], tier: 'explorers', score: 100, accuracyPercent: 90, dateKey: dk(), createdAt: serverTimestamp(), ...o });
 const prof = (uid, o = {}) => ({ uid, displayName: 'Ann', email: uid + '@b.co', ageTier: 'explorers', dailyProblemGoal: 10, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...o });
+const SC = 'gameScores';
+const scoreDoc = (o = {}) => ({ uid: 'u1', displayName: 'Ann', gameId: 'addition-attack', gameTitle: 'Addition Attack', tier: 'explorers', score: 100, accuracyPercent: 90, dateKey: new Date().toISOString().slice(0, 10), createdAt: serverTimestamp(), ...o });
 
-test('valid score create', async () => { await assertSucceeds(setDoc(doc(ctx('u1'), 'gameScores', id('u1')), score('u1'))); });
-test('raise own score ok', async () => { await assertSucceeds(setDoc(doc(ctx('u1'), 'gameScores', id('u1')), score('u1', { score: 150 }))); });
-test('lower/equal score denied', async () => {
-  await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1')), score('u1', { score: 150 })));
-  await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1')), score('u1', { score: 10 })));
+// ---- gameScores: reads for signed-in only, NO client writes ----
+test('gameScores: signed-in get/list ok, anonymous denied', async () => {
+  await assertSucceeds(getDocs(collection(ctx('u2'), SC)));
+  await assertSucceeds(getDoc(doc(ctx('u2'), SC, 'u1_addition-attack_2026-01-01')));
+  await assertFails(getDocs(collection(anon(), SC)));
+  await assertFails(getDoc(doc(anon(), SC, 'u1_addition-attack_2026-01-01')));
 });
-test('update other fields denied', async () => { await assertFails(updateDoc(doc(ctx('u1'), 'gameScores', id('u1')), { tier: 'strategists', score: 999 })); });
-test('unauth create/read denied', async () => {
-  await assertFails(setDoc(doc(anon(), 'gameScores', id('u1', 'factor-grid')), score('u1', { gameId: 'factor-grid' })));
-  await assertFails(getDocs(collection(anon(), 'gameScores')));
-  await assertFails(getDoc(doc(anon(), 'gameScores', id('u1'))));
+test('gameScores: valid-looking client create denied (owner, verified)', async () => {
+  const d = scoreDoc();
+  await assertFails(setDoc(doc(ctx('u1'), SC, `u1_${d.gameId}_${d.dateKey}`), d));
 });
-test('signed-in list/get ok', async () => {
-  await assertSucceeds(getDocs(collection(ctx('u2'), 'gameScores')));
-  await assertSucceeds(getDoc(doc(ctx('u2'), 'gameScores', id('u1'))));
+test('gameScores: forged 100000 / random id / other uid create denied', async () => {
+  await assertFails(setDoc(doc(ctx('u1'), SC, 'spam1'), scoreDoc({ score: 100000 })));
+  await assertFails(setDoc(doc(ctx('u1'), SC, 'u2_x_y'), scoreDoc({ uid: 'u2' })));
 });
-test('random doc id denied', async () => { await assertFails(setDoc(doc(ctx('u1'), 'gameScores', 'sc_123_abc'), score('u1', { gameId: 'odds-urns' }))); });
-test('id for other game/date denied', async () => { await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'odds-urns')), score('u1', { gameId: 'factor-grid' }))); });
-test('uid spoof denied', async () => { await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u2')), score('u2'))); });
-test('unverified email denied', async () => { await assertFails(setDoc(doc(ctx('u2', { email_verified: false }), 'gameScores', id('u2', 'factor-grid')), score('u2', { gameId: 'factor-grid' }))); });
-test('displayName != profile denied', async () => { await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'equation-foundry')), score('u1', { gameId: 'equation-foundry', displayName: 'Someone Else' }))); });
-test('ghost/old fields denied', async () => {
-  await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'subtraction-sprint')), score('u1', { gameId: 'subtraction-sprint', isAdmin: true })));
-  await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'subtraction-sprint')), score('u1', { gameId: 'subtraction-sprint', weekKey: '2026-W47' })));
+test('gameScores: update (raise) and delete denied even for owner', async () => {
+  await assertFails(updateDoc(doc(ctx('u1'), SC, 'u1_addition-attack_2026-01-01'), { score: 99999 }));
+  await assertFails(deleteDoc(doc(ctx('u1'), SC, 'u1_addition-attack_2026-01-01')));
+  await assertFails(deleteDoc(doc(ctx('u2'), SC, 'u1_addition-attack_2026-01-01')));
 });
-test('score bounds denied', async () => {
-  await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'daily-challenge')), score('u1', { gameId: 'daily-challenge', score: 100001 })));
-  await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'daily-challenge')), score('u1', { gameId: 'daily-challenge', score: -1 })));
-});
-test('far past/future dateKey denied; +-1 day ok', async () => {
-  for (const d of ['2099-12-31', '2020-01-01', '9999-99-99', dk(-3), dk(3)])
-    await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'multiplication-mastery', d)), score('u1', { gameId: 'multiplication-mastery', dateKey: d })));
-  for (const d of [dk(-1), dk(1)])
-    await assertSucceeds(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'multiplication-mastery', d)), score('u1', { gameId: 'multiplication-mastery', dateKey: d })));
-});
-test('forged createdAt denied', async () => { await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'odds-urns')), score('u1', { gameId: 'odds-urns', createdAt: new Date('2020-01-01') }))); });
-test('cross-user delete denied, own delete ok', async () => {
-  await assertFails(deleteDoc(doc(ctx('u2'), 'gameScores', id('u1'))));
-  await assertSucceeds(deleteDoc(doc(ctx('u1'), 'gameScores', id('u1'))));
-});
-test('profile email must match token', async () => {
+
+// ---- server-only collections ----
+for (const [c, d] of [['rounds', 'u1_r1'], ['scoreFlags', 'f1'], ['rateLimits', 'u1']]) {
+  test(`${c}: no client read/write/delete (even owner, verified)`, async () => {
+    const db = ctx('u1');
+    await assertFails(getDoc(doc(db, c, d)));
+    await assertFails(getDocs(collection(db, c)));
+    await assertFails(setDoc(doc(db, c, d), { uid: 'u1', status: 'closed' }));
+    await assertFails(setDoc(doc(db, c, 'new'), { uid: 'u1' }));
+    await assertFails(updateDoc(doc(db, c, d), { status: 'closed' }));
+    await assertFails(deleteDoc(doc(db, c, d)));
+    await assertFails(getDoc(doc(anon(), c, d)));
+  });
+}
+
+// ---- users ----
+test('users: profile email must match token', async () => {
   await env.withSecurityRulesDisabled(async (c) => deleteDoc(doc(c.firestore(), 'users', 'u2')));
   await assertFails(setDoc(doc(ctx('u2'), 'users', 'u2'), prof('u2', { email: 'victim@x.org' })));
   await assertSucceeds(setDoc(doc(ctx('u2'), 'users', 'u2'), prof('u2', { displayName: 'Ann2' })));
   await assertFails(updateDoc(doc(ctx('u2'), 'users', 'u2'), { email: 'victim@x.org', updatedAt: serverTimestamp() }));
+});
+test('users: displayName rules-level check (size 2-20, charset)', async () => {
+  const u = doc(ctx('u2'), 'users', 'u2');
+  const upd = (displayName) => updateDoc(u, { displayName, updatedAt: serverTimestamp() });
+  for (const ok of ['Ab', 'आरव', 'தமிழ் செல்வன்', 'Cool_name-1.x', 'a'.repeat(20)]) await assertSucceeds(upd(ok));
+  for (const bad of ['', 'A', 'a'.repeat(21), '<script>', 'me@x.com', 'a$b', ' lead', 'trail ', 'emoji\u{1F600}', '_start', 'x/y', 'line\nbreak']) await assertFails(upd(bad));
 });
 test('users: cross-read, list, extra field denied; own delete ok', async () => {
   await assertFails(getDoc(doc(ctx('u2'), 'users', 'u1')));
@@ -70,10 +82,7 @@ test('users: cross-read, list, extra field denied; own delete ok', async () => {
   await assertFails(updateDoc(doc(ctx('u2'), 'users', 'u2'), { role: 'admin', updatedAt: serverTimestamp() }));
   await assertSucceeds(deleteDoc(doc(ctx('u2'), 'users', 'u2')));
 });
-test('gameTitle must match gameId', async () => {
-  await assertFails(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'factor-grid')), score('u1', { gameId: 'factor-grid', gameTitle: 'Totally Other Game' })));
-  await assertSucceeds(setDoc(doc(ctx('u1'), 'gameScores', id('u1', 'odds-urns')), score('u1', { gameId: 'odds-urns', gameTitle: 'Odds & Urns' })));
-});
-test('one doc per user/game/day: spam 100000 as new id denied', async () => {
-  for (let i = 0; i < 3; i++) await assertFails(setDoc(doc(ctx('u1'), 'gameScores', 'spam' + i), score('u1', { score: 100000 })));
+test('users: other-uid create and unauthenticated denied', async () => {
+  await assertFails(setDoc(doc(ctx('u1'), 'users', 'u3'), prof('u3')));
+  await assertFails(setDoc(doc(anon(), 'users', 'u9'), prof('u9')));
 });

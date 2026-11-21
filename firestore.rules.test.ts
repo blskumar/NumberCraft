@@ -31,18 +31,16 @@ describe('Firestore Security Rules & Blueprint Verification (firestore.rules)', 
     assert.ok(rulesText.includes('incoming().createdAt == existing().createdAt'));
     assert.ok(rulesText.includes('incoming().updatedAt == request.time'));
 
-    // Signed-in-only, raise-only, deterministic-id scores on /gameScores/{scoreId}
+    // Signed-in reads; scores/rounds/flags are written only by Cloud Functions
     assert.ok(rulesText.includes('match /gameScores/{scoreId}'));
     assert.ok(rulesText.includes('allow get, list: if isSignedIn();'));
+    assert.ok(rulesText.includes('allow create, update, delete: if false;'));
     assert.ok(!rulesText.includes("visibility == 'public'"));
-    assert.ok(rulesText.includes('incoming().score > existing().score'));
-    assert.ok(rulesText.includes("scoreId == incoming().uid + '_' + incoming().gameId + '_' + incoming().dateKey"));
-    assert.ok(rulesText.includes('isNearServerDay(data.dateKey)'));
-    assert.ok(rulesText.includes('data.displayName == profileName()'));
+    for (const c of ['rounds/{roundId}', 'scoreFlags/{flagId}', 'rateLimits/{uid}']) {
+      assert.ok(rulesText.includes(`match /${c}`), c);
+    }
+    assert.ok(rulesText.includes('isAcceptableDisplayName(data.displayName)'));
     assert.ok(rulesText.includes('data.email == request.auth.token.email'));
-    assert.ok(rulesText.includes('isEmailVerified()'));
-    assert.ok(rulesText.includes('isValidGameScore(incoming())'));
-    assert.ok(rulesText.includes('data.score <= 100000'));
     assert.ok(rulesText.includes('data.uid == request.auth.uid'));
   });
 
@@ -52,14 +50,6 @@ describe('Firestore Security Rules & Blueprint Verification (firestore.rules)', 
       assert.ok(
         rulesText.includes(`'${key}'`),
         `Expected UserProfileDoc key '${key}' enforced in firestore.rules`
-      );
-    }
-
-    const scoreRequired = blueprint.entities.GameScoreDoc.required ?? [];
-    for (const key of scoreRequired) {
-      assert.ok(
-        rulesText.includes(`'${key}'`),
-        `Expected GameScoreDoc key '${key}' enforced in firestore.rules`
       );
     }
   });

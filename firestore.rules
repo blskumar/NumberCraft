@@ -38,59 +38,21 @@ service cloud.firestore {
         && data.email == request.auth.token.email;
     }
 
-    function isEmailVerified() {
-      return request.auth.token.email_verified == true;
-    }
-
-    function pad2(n) {
-      return n < 10 ? '0' + string(n) : string(n);
-    }
-
-    function dayKey(t) {
-      return string(t.year()) + '-' + pad2(t.month()) + '-' + pad2(t.day());
-    }
-
-    // dateKey is the player's LOCAL day, so accept server UTC day +/- 1.
-    function isNearServerDay(key) {
-      return key in [
-        dayKey(request.time - duration.value(1, 'd')),
-        dayKey(request.time),
-        dayKey(request.time + duration.value(1, 'd'))
-      ];
-    }
-
-    // The public name on a score must equal the owner's profile name.
-    function profileName() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName;
+    // Rules-expressible subset of lib/name-moderation.ts: 2-20 chars, letters
+    // (any script), combining marks, digits, space - _ . ; no leading/trailing
+    // space. Profanity/impersonation/PII checks cannot be expressed in rules
+    // and live in the client and the submitScore function, which never trusts
+    // the client for the name shown on the leaderboard.
+    function isAcceptableDisplayName(name) {
+      return name is string
+        && name.size() >= 2
+        && name.size() <= 20
+        && name.matches('^[\\p{L}\\p{N}][\\p{L}\\p{M}\\p{N} _.\\-]*$')
+        && !name.matches('.*\\s$');
     }
 
     function isValidTier(tier) {
       return tier is string && tier in ['explorers', 'challengers', 'strategists'];
-    }
-
-    function isValidGameId(gameId) {
-      return gameId is string && gameId in [
-        'addition-attack',
-        'subtraction-sprint',
-        'multiplication-mastery',
-        'equation-foundry',
-        'odds-urns',
-        'factor-grid',
-        'daily-challenge'
-      ];
-    }
-
-    // Must match PLAYABLE_GAME_CATALOG titles in lib/guest-trial.ts.
-    function gameTitles() {
-      return {
-        'addition-attack': 'Addition Attack',
-        'subtraction-sprint': 'Subtraction Sprint',
-        'multiplication-mastery': 'Multiplication Mastery',
-        'equation-foundry': 'Equation Foundry',
-        'odds-urns': 'Odds & Urns',
-        'factor-grid': 'Factor Grid',
-        'daily-challenge': 'Daily Math Challenge'
-      };
     }
 
     // -------------------------------------------------------------------------
@@ -118,8 +80,7 @@ service cloud.firestore {
         && isValidId(data.uid)
         && data.uid == request.auth.uid
         && data.displayName is string
-        && data.displayName.size() >= 1
-        && data.displayName.size() <= 28
+        && isAcceptableDisplayName(data.displayName)
         && data.email is string
         && data.email.size() >= 3
         && data.email.size() <= 120
@@ -131,51 +92,6 @@ service cloud.firestore {
         && data.dailyProblemGoal <= 100
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
-    }
-
-    function isValidGameScore(data) {
-      return data.keys().hasAll([
-          'uid',
-          'displayName',
-          'gameId',
-          'gameTitle',
-          'tier',
-          'score',
-          'accuracyPercent',
-          'dateKey',
-          'createdAt'
-        ])
-        && data.keys().hasOnly([
-          'uid',
-          'displayName',
-          'gameId',
-          'gameTitle',
-          'tier',
-          'score',
-          'accuracyPercent',
-          'dateKey',
-          'createdAt'
-        ])
-        && isValidId(data.uid)
-        && data.uid == request.auth.uid
-        && data.displayName is string
-        && data.displayName.size() >= 1
-        && data.displayName.size() <= 28
-        && data.displayName == profileName()
-        && isValidGameId(data.gameId)
-        && data.gameTitle == gameTitles()[data.gameId]
-        && isValidTier(data.tier)
-        && data.score is int
-        && data.score >= 0
-        && data.score <= 100000
-        && data.accuracyPercent is int
-        && data.accuracyPercent >= 0
-        && data.accuracyPercent <= 100
-        && data.dateKey is string
-        && data.dateKey.size() == 10
-        && data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-        && isNearServerDay(data.dateKey)
-        && data.createdAt is timestamp;
     }
 
     // -------------------------------------------------------------------------
@@ -211,42 +127,28 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // /gameScores/{scoreId}: readable by any SIGNED-IN user.
+    // /gameScores/{scoreId}: readable by any SIGNED-IN user, written ONLY by
+    // the submitScore Cloud Function (Admin SDK bypasses these rules).
+    // Doc id is {uid}_{gameId}_{serverDateKey}; the function keeps best-of-day.
     // Exposed fields: uid, displayName, tier, gameId, score, accuracy, dateKey.
-    // This is NOT zero-PII (see security_spec.md).
-    //
-    // Doc id is deterministic ({uid}_{gameId}_{dateKey}): one doc per user,
-    // game and day, so one account cannot flood the board. A score can only be
-    // RAISED (best-of-day); createdAt is bumped to request.time on each raise.
-    // Scores are still asserted by the client: genuine anti-cheat needs a
-    // trusted backend (Cloud Function) which this project does not have.
+    // This is NOT zero-PII (see security_spec.md). Erasure on account deletion
+    // is done by the eraseUserData auth-trigger function, not by the client.
     // -------------------------------------------------------------------------
     match /gameScores/{scoreId} {
       allow get, list: if isSignedIn();
+      allow create, update, delete: if false;
+    }
 
-      allow create: if isSignedIn()
-        && isEmailVerified()
-        && isValidId(scoreId)
-        && isValidGameScore(incoming())
-        && scoreId == incoming().uid + '_' + incoming().gameId + '_' + incoming().dateKey
-        && incoming().createdAt == request.time;
-
-      allow update: if isSignedIn()
-        && isEmailVerified()
-        && existing().uid == request.auth.uid
-        && isValidGameScore(incoming())
-        && incoming().createdAt == request.time
-        && incoming().score > existing().score
-        && incoming().diff(existing()).affectedKeys().hasOnly([
-          'score',
-          'accuracyPercent',
-          'createdAt'
-        ]);
-
-      // Owner may erase their own scores (account deletion / right to erasure).
-      allow delete: if isSignedIn()
-        && isValidId(scoreId)
-        && existing().uid == request.auth.uid;
+    // Server-only collections (round tokens, anomaly flags, rate-limit
+    // counters). No client access of any kind.
+    match /rounds/{roundId} {
+      allow read, write: if false;
+    }
+    match /scoreFlags/{flagId} {
+      allow read, write: if false;
+    }
+    match /rateLimits/{uid} {
+      allow read, write: if false;
     }
   }
 }
