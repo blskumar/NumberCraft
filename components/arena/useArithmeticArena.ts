@@ -1,3 +1,4 @@
+import { useKeypadKeyboard } from './useKeypadKeyboard';
 import { ArenaPhase } from './arithmetic-constants';
 import { computeHistoricalCalibration, createAdaptiveSession, stepAdaptiveSession, type AdaptiveSessionState } from '@/lib/adaptive-arithmetic';
 import { ARITHMETIC_GAMES, ARITHMETIC_PACES, MULTIPLICATION_STAGES_BY_TIER, buildArithmeticMatchRecord, calculateAnswerPoints, generateArithmeticProblem, getParTargetScore, type ArithmeticAnswerEntry, type ArithmeticProblem, type ArithmeticRoundConfig, type MultiplicationTableFocus } from '@/lib/arithmetic-engine';
@@ -399,40 +400,14 @@ export function useArithmeticArena(props: ArithmeticArenaProps) {
     setInputValue((prev) => prev.slice(0, -1));
   }, []);
 
-  // Global keyboard handler while playing
-  useEffect(() => {
-    if (phase !== 'playing') return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        e.target instanceof HTMLSelectElement
-      ) {
-        return;
-      }
-      if (e.key >= '0' && e.key <= '9') {
-        e.preventDefault();
-        handleDigitAppend(e.key);
-      } else if (e.key === '-') {
-        e.preventDefault();
-        handleDigitAppend('-');
-      } else if (e.key === 'Backspace') {
-        e.preventDefault();
-        handleBackspace();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        setInputValue('');
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        submitAnswer(inputValue);
-      } else if (e.key === 'h' || e.key === 'H') {
-        e.preventDefault();
-        setShowHint((prev) => !prev);
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [phase, handleDigitAppend, handleBackspace, submitAnswer, inputValue]);
+  useKeypadKeyboard(phase === 'playing', {
+    onDigit: handleDigitAppend,
+    onMinus: () => handleDigitAppend('-'),
+    onBackspace: handleBackspace,
+    onClear: () => setInputValue(''),
+    onSubmit: () => submitAnswer(inputValue),
+    onHint: () => setShowHint((prev) => !prev),
+  });
 
   const accuracyPercent =
     attempted > 0 ? Math.round((solved / attempted) * 100) : 100;

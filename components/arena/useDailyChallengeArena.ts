@@ -1,3 +1,4 @@
+import { useKeypadKeyboard } from './useKeypadKeyboard';
 import { DAILY_BADGE_IDS, DailyPhase } from './daily-constants';
 import { type AchievementDefinition, type AchievementEvaluation } from '@/lib/achievements';
 import { buildDailyShareSummary, calculateDailyScore, computeDailyStreakStats, formatCountdownClock, generateDailyPuzzle, getLocalDateKey, getSecondsUntilNextDaily, getStreakBonusPoints, getStreakRewardSummary } from '@/lib/daily-challenge';
@@ -336,44 +337,13 @@ export function useDailyChallengeArena(props: DailyChallengeArenaProps) {
     setInputValue((prev) => prev.slice(0, -1));
   }, []);
 
-  // Keyboard support during timed challenge
-  useEffect(() => {
-    if (phase !== 'playing') return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        e.target instanceof HTMLSelectElement
-      ) {
-        return;
-      }
-      if (e.key >= '0' && e.key <= '9') {
-        e.preventDefault();
-        handleDigitAppend(e.key);
-      } else if (e.key === 'Backspace') {
-        e.preventDefault();
-        handleBackspace();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        setInputValue('');
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        handleSubmitStep(inputValue);
-      } else if (e.key === 'h' || e.key === 'H') {
-        e.preventDefault();
-        handleRevealHint();
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [
-    phase,
-    handleDigitAppend,
-    handleBackspace,
-    handleSubmitStep,
-    inputValue,
-    handleRevealHint,
-  ]);
+  useKeypadKeyboard(phase === 'playing', {
+    onDigit: handleDigitAppend,
+    onBackspace: handleBackspace,
+    onClear: () => setInputValue(''),
+    onSubmit: () => handleSubmitStep(inputValue),
+    onHint: handleRevealHint,
+  });
 
   function handleCopyShareSummary() {
     if (!activeCompletion) return;
