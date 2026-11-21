@@ -29,7 +29,7 @@ export function isActiveGameTab(tab: StudioTab): boolean {
  * Formats elapsed session seconds into crisp mm:ss (or h:mm:ss above an hour).
  */
 export function formatElapsedSessionClock(totalSeconds: number): string {
-  const safe = Math.max(0, Math.floor(totalSeconds));
+  const safe = Number.isFinite(totalSeconds) ? Math.max(0, Math.floor(totalSeconds)) : 0;
   const hours = Math.floor(safe / 3600);
   const mins = Math.floor((safe % 3600) / 60);
   const secs = safe % 60;

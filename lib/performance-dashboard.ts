@@ -379,10 +379,10 @@ export function buildArithmeticAccuracySeries(
       return gameOk && tierOk;
     })
     .sort((a, b) => {
-      const tA = new Date(a.playedAt).getTime();
-      const tB = new Date(b.playedAt).getTime();
-      if (Number.isNaN(tA) || Number.isNaN(tB)) return 0;
-      return tA - tB;
+      // unparseable dates sort last so the order of valid sessions never depends on input order
+      const tA = finiteOr(new Date(a.playedAt).getTime(), Infinity);
+      const tB = finiteOr(new Date(b.playedAt).getTime(), Infinity);
+      return tA === tB ? 0 : tA < tB ? -1 : 1;
     });
 
   return relevant.map((m, idx) => {
@@ -504,11 +504,8 @@ export function buildChallengeCompletionHistory(
   todayKey: string = getLocalDateKey(),
   days: number = 14
 ): DailyCompletionHistoryBucket[] {
-  const safeDays = Math.max(7, Math.min(30, days));
-  const dailyByDate = new Map<string, DailyChallengeCompletion>();
-  for (const c of dailyCompletions) {
-    dailyByDate.set(c.dateKey, c);
-  }
+  const safeDays = Math.max(7, Math.min(30, finiteOr(days, 14)));
+  const dailyByDate = indexDailyByDate(dailyCompletions);
 
   const arithByDate = new Map<string, number>();
   const factorByDate = new Map<string, number>();
@@ -581,10 +578,7 @@ export function buildDailyChallenge30DayFrequency(
   dailyCompletions: DailyChallengeCompletion[],
   todayKey: string = getLocalDateKey()
 ): DailyConsistency30DayData {
-  const dailyByDate = new Map<string, DailyChallengeCompletion>();
-  for (const c of dailyCompletions) {
-    dailyByDate.set(c.dateKey, c);
-  }
+  const dailyByDate = indexDailyByDate(dailyCompletions);
 
   const points: DailyFrequency30DayPoint[] = [];
   let solvedDays = 0;
@@ -691,10 +685,7 @@ export function buildDailyGoalCompletionRate30Day(
   dailyCompletions: DailyChallengeCompletion[],
   todayKey: string = getLocalDateKey()
 ): DailyGoalCompletionRate30DayData {
-  const dailyByDate = new Map<string, DailyChallengeCompletion>();
-  for (const c of dailyCompletions) {
-    dailyByDate.set(c.dateKey, c);
-  }
+  const dailyByDate = indexDailyByDate(dailyCompletions);
 
   const rawPoints: Omit<DailyGoalRateDayPoint, 'rolling7DayRatePercent'>[] = [];
   let daysMet = 0;
@@ -717,11 +708,11 @@ export function buildDailyGoalCompletionRate30Day(
     if (entry?.solved) {
       status = 'met';
       completionRatePercent = 100;
-      stepsSolved = Math.max(3, entry.stepsSolved);
+      stepsSolved = Math.max(3, finiteOr(entry.stepsSolved, 3));
       daysMet += 1;
     } else if (entry) {
       status = 'partial';
-      stepsSolved = Math.max(0, Math.min(3, Math.round(entry.stepsSolved)));
+      stepsSolved = Math.max(0, Math.min(3, Math.round(finiteOr(entry.stepsSolved, 0))));
       completionRatePercent = Math.min(
         99,
         Math.round((stepsSolved / 3) * 100)
@@ -818,12 +809,11 @@ export function buildDailyStreakDurationSeries(
   todayKey: string = getLocalDateKey(),
   days: number = 30
 ): DailyStreakTrendData {
-  const safeDays = Math.max(7, Math.min(90, Math.floor(days)));
-  const dailyByDate = new Map<string, DailyChallengeCompletion>();
+  const safeDays = Math.max(7, Math.min(90, Math.floor(finiteOr(days, 30))));
+  const dailyByDate = indexDailyByDate(dailyCompletions);
   const solvedDates = new Set<string>();
 
   for (const c of dailyCompletions) {
-    dailyByDate.set(c.dateKey, c);
     if (c.solved) {
       solvedDates.add(c.dateKey);
     }
@@ -1042,8 +1032,22 @@ export function computeDashboardOverview(
   };
 }
 
+/** One completion per day; a later failed retry never hides an earlier solve. */
+function indexDailyByDate(
+  completions: DailyChallengeCompletion[]
+): Map<string, DailyChallengeCompletion> {
+  const byDate = new Map<string, DailyChallengeCompletion>();
+  for (const c of completions) {
+    const cur = byDate.get(c.dateKey);
+    if (!(cur?.solved && !c.solved)) byDate.set(c.dateKey, c);
+  }
+  return byDate;
+}
+
+const finiteOr = (n: number, fallback: number) => (Number.isFinite(n) ? n : fallback);
+
 export function isSampleDailyCompletion(c: DailyChallengeCompletion): boolean {
-  return c.completedAt.endsWith('.111Z');
+  return c.isSample === true;
 }
 
 export function createSampleDashboardData(
@@ -1302,7 +1306,8 @@ export function createSampleDashboardData(
       score: d.score,
       streakDays: d.streakDays,
       streakBonus: d.streakBonus > 0 ? d.streakBonus : undefined,
-      completedAt: `${dk}T15:00:00.111Z`,
+      completedAt: `${dk}T15:00:00.000Z`,
+      isSample: true,
     };
   });
 
