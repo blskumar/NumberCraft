@@ -159,7 +159,7 @@ export default function DailyLeaderboardCard({
       </div>
 
       {/* Top 5 Leaderboard Table */}
-      <div className="mt-4 overflow-x-auto">
+      <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Scrollable table">
         <table className="w-full min-w-[540px] border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-[#E5E0D5] text-[11px] font-semibold text-[#5A6572]">

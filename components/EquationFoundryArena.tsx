@@ -1084,7 +1084,7 @@ export default function EquationFoundryArena({
           )}
 
           {/* Round-by-round breakdown */}
-          <div className="mt-6 overflow-x-auto">
+          <div className="mt-6 overflow-x-auto" tabIndex={0} role="region" aria-label="Scrollable table">
             <table className="w-full min-w-[560px] text-left text-xs">
               <thead>
                 <tr className="border-b border-[#E5E0D5] font-mono text-[#5A6572]">

@@ -250,7 +250,7 @@ export default function MasteryNotebook({
             </button>
           </div>
         ) : (
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Scrollable table">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[#ECE7DD] text-xs text-[#5A6572]">
