@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "REPLACE_WITH_PROJECT_ID_FROM_firebase-applet-config.json",
+    "staging": "REPLACE_WITH_STAGING_PROJECT_ID"
+  }
+}
