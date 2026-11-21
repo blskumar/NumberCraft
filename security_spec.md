@@ -1,22 +1,26 @@
-# Numbercraft Firestore Security Specification (Phase 0)
+# Numbercraft Firestore Security Specification
 
-## 1. Data Invariants
-1. **Strict PII Isolation (`/users/{userId}`)**: Private user documents containing `email` may ONLY be read (`get`), created, updated, or deleted by the authenticated owner (`request.auth.uid == userId`). Blanket `list` queries on `/users` are strictly denied.
-2. **Identity Integrity**: Both `/users/{userId}` and `/gameScores/{scoreId}` require `incoming().uid == request.auth.uid` on create and prohibit changing `uid` or `createdAt` on update.
-3. **Immutable Score Integrity (`/gameScores/{scoreId}`)**: Submitted game scores are append-only (`allow update: if false;`) to prevent post-hoc score tampering. Players may only submit scores under their own `uid` with bounded numeric values (`0 <= score <= 100000`, `0 <= accuracyPercent <= 100`), canonical `gameId`, and strict `YYYY-MM-DD` / `YYYY-Www` calendar keys.
-4. **Zero-PII Public Leaderboards**: `/gameScores/{scoreId}` documents never store `email`, phone numbers, or sensitive fields. `allow get` and `allow list` require explicit `resource.data.visibility == 'public'` checks enforced rule-side.
-5. **Temporal & Volumetric Hardening**: All `createdAt` and `updatedAt` timestamps must match `request.time`; all string fields enforce explicit `.size()` bounds; all document IDs enforce `isValidId()` (`^[a-zA-Z0-9_\-]+$`, `<= 128` chars).
+## 1. Data invariants
+1. **Private profiles (`/users/{userId}`)**: only the authenticated owner may get, create, update or delete. `list` is denied. The stored `email` must equal `request.auth.token.email`.
+2. **Identity integrity**: `uid` must equal `request.auth.uid` on create; `uid` and `createdAt` cannot change on update.
+3. **One score per user, game and day (`/gameScores/{uid}_{gameId}_{dateKey}`)**: the document id is deterministic, so an account cannot flood the board. A score can only be RAISED (best-of-day); lowering or editing other fields is denied. `createdAt` is set to `request.time` on each raise. Scores need a verified email (`email_verified`).
+4. **Bounded values**: `0 <= score <= 100000`, `0 <= accuracyPercent <= 100`, `gameId` from the allowlist, `gameTitle` bound to `gameId`, `dateKey` must be the server UTC day +/- 1 (covers client time zones). `weekKey` is not stored; the week is derived client-side from `dateKey`.
+5. **No impersonation**: `displayName` on a score must equal `users/{uid}.displayName` (checked with `get()`).
+6. **Server time**: `createdAt` / `updatedAt` must equal `request.time`.
+7. **Erasure**: an owner may delete their own profile and scores (account deletion). The score ledger is therefore NOT append-only; the deterministic id limits abuse to one doc per user/game/day.
 
-## 2. The "Dirty Dozen" Adversarial Payloads
-1. **Unauthenticated Score Injection**: Unauthenticated client attempts `create` on `/gameScores/score-1`. -> `PERMISSION_DENIED`.
-2. **Identity Spoofing on Score Create**: Authenticated user `u1` creates `/gameScores/score-2` with `uid: "u2"`. -> `PERMISSION_DENIED`.
-3. **Ghost / Shadow Field Injection**: Authenticated user `u1` creates `/gameScores/score-3` with extra field `isAdmin: true`. -> `PERMISSION_DENIED`.
-4. **Score Tampering via Update**: Authenticated user `u1` attempts `update` on their own `/gameScores/score-1` to raise `score: 99999`. -> `PERMISSION_DENIED`.
-5. **Cross-User Score Deletion**: Authenticated user `u2` attempts `delete` on `u1`'s `/gameScores/score-1`. -> `PERMISSION_DENIED`.
-6. **Out-of-Bounds / Negative Score Poisoning**: Authenticated user `u1` submits `score: 999999999` or `score: -50`. -> `PERMISSION_DENIED`.
-7. **Invalid `gameId` Injection**: Authenticated user `u1` submits `gameId: "hacked-mode"`. -> `PERMISSION_DENIED`.
-8. **Malformed Calendar Key / ID Poisoning**: Authenticated user `u1` creates `/gameScores/invalid..id/path` or `dateKey: "yesterday"`. -> `PERMISSION_DENIED`.
-9. **Client-Forged Timestamp**: Authenticated user `u1` submits a past `createdAt` instead of `request.time`. -> `PERMISSION_DENIED`.
-10. **PII Cross-User Read (`get`)**: Authenticated user `u2` attempts `get` on `/users/u1` to scrape `email`. -> `PERMISSION_DENIED`.
-11. **PII Directory Scraping (`list`)**: Authenticated user `u1` attempts `list` on `/users`. -> `PERMISSION_DENIED`.
-12. **Immutable Profile Field Mutation**: Authenticated user `u1` attempts `update` on `/users/u1` modifying `uid` or `createdAt`, or adding `role: "admin"`. -> `PERMISSION_DENIED`.
+## 2. What is public (be honest)
+Scores are readable by **any signed-in user** (no anonymous reads). Each score exposes: `uid` (stable Firebase UID), `displayName`, age `tier` (the `explorers` tier implies a young child), `gameId`, `score`, `accuracyPercent`, `dateKey`. Email is never stored on scores. This is **not** "zero-PII": the display name is chosen by the child and shown to other signed-in players. The UI tells users not to use their real name.
+
+## 3. Residual risks (need backend / console / legal action by the owner)
+- **Scores are client-asserted.** Rules cannot verify gameplay. Any verified account can post up to 100000 for itself. Real anti-cheat needs a trusted backend (Cloud Function or Admin SDK validating scores). Not built here.
+- **Sybil accounts**: many free accounts can still fill the leaderboard window (`limit(250)`). Enable App Check and Auth quotas in the console.
+- **Display-name moderation**: no profanity filter; names are free text (1-28 chars).
+- **Delete then re-post** the same day is possible (the id is free again after delete).
+- **Child consent / COPPA / GDPR-K**: the UI adds a guardian-consent checkbox and privacy notice, but this is not legal verification of parental consent. Legal review is required before launch to under-13/16 users.
+- Enable Firebase Auth email-enumeration protection, restrict the API key by HTTP referrer, and enable App Check (console actions).
+
+## 4. Adversarial cases covered by the emulator test (`firestore.rules.emu.test.mjs`)
+Unauthenticated read/write denied; uid spoofing; ghost/legacy fields (`weekKey`, `isAdmin`); random doc id or id not matching uid/game/date; lower or equal score update; editing non-score fields; unverified email; displayName not matching profile; gameTitle not matching gameId; score out of bounds; dateKey far past/future or malformed; forged `createdAt`; cross-user delete; profile email not matching token; cross-user profile read; `users` list; extra profile fields.
+
+Run: start the Firestore emulator (needs JDK 21+) and `node --test firestore.rules.emu.test.mjs` with `@firebase/rules-unit-testing` installed (not a project dependency).

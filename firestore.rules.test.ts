@@ -19,7 +19,7 @@ describe('Firestore Security Rules & Blueprint Verification (firestore.rules)', 
     assert.ok(rulesText.includes('allow read, write: if false;'));
   });
 
-  it('covers every collection declared in firebase-blueprint.json with strict PII isolation and immutability', () => {
+  it('covers every collection declared in firebase-blueprint.json with owner-only profiles and raise-only scores', () => {
     assert.ok('/users/{userId}' in blueprint.firestore);
     assert.ok('/gameScores/{scoreId}' in blueprint.firestore);
 
@@ -31,10 +31,16 @@ describe('Firestore Security Rules & Blueprint Verification (firestore.rules)', 
     assert.ok(rulesText.includes('incoming().createdAt == existing().createdAt'));
     assert.ok(rulesText.includes('incoming().updatedAt == request.time'));
 
-    // Immutable zero-PII game scores on /gameScores/{scoreId}
+    // Signed-in-only, raise-only, deterministic-id scores on /gameScores/{scoreId}
     assert.ok(rulesText.includes('match /gameScores/{scoreId}'));
-    assert.ok(rulesText.includes('allow update: if false;'));
-    assert.ok(rulesText.includes("existing().visibility == 'public'"));
+    assert.ok(rulesText.includes('allow get, list: if isSignedIn();'));
+    assert.ok(!rulesText.includes("visibility == 'public'"));
+    assert.ok(rulesText.includes('incoming().score > existing().score'));
+    assert.ok(rulesText.includes("scoreId == incoming().uid + '_' + incoming().gameId + '_' + incoming().dateKey"));
+    assert.ok(rulesText.includes('isNearServerDay(data.dateKey)'));
+    assert.ok(rulesText.includes('data.displayName == profileName()'));
+    assert.ok(rulesText.includes('data.email == request.auth.token.email'));
+    assert.ok(rulesText.includes('isEmailVerified()'));
     assert.ok(rulesText.includes('isValidGameScore(incoming())'));
     assert.ok(rulesText.includes('data.score <= 100000'));
     assert.ok(rulesText.includes('data.uid == request.auth.uid'));
