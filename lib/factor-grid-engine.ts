@@ -47,7 +47,7 @@ export const TIER_SPECS: Record<AgeTier, TierSpec> = {
 export const PRIME_TRAP_BONUS = 3;
 
 export function getProperDivisors(n: number): number[] {
-  if (n <= 1) return [];
+  if (!Number.isSafeInteger(n) || n <= 1) return [];
   const divisors: number[] = [1];
   const limit = Math.floor(Math.sqrt(n));
   for (let d = 2; d <= limit; d++) {
@@ -63,7 +63,7 @@ export function getProperDivisors(n: number): number[] {
 }
 
 export function isPrime(n: number): boolean {
-  if (n < 2) return false;
+  if (!Number.isSafeInteger(n) || n < 2) return false;
   if (n === 2) return true;
   if (n % 2 === 0) return false;
   const limit = Math.floor(Math.sqrt(n));
@@ -76,6 +76,16 @@ export function isPrime(n: number): boolean {
 export function classifyNumber(n: number): NumberClassification {
   const properDivisors = getProperDivisors(n);
   const divisorSum = properDivisors.reduce((acc, d) => acc + d, 0);
+
+  if (!Number.isSafeInteger(n) || n < 1) {
+    return {
+      value: n,
+      kind: 'invalid',
+      properDivisors: [],
+      divisorSum: 0,
+      summary: `${n} is not a positive whole number, so it has no divisor classification.`,
+    };
+  }
 
   if (n === 1) {
     return {
@@ -155,7 +165,7 @@ export function createFactorGame(options: CreateGameOptions): FactorGameState {
       scholar: 'AI · Scholar',
       master: 'AI · Master',
     };
-    player2Name = labelMap[aiDifficulty];
+    player2Name = labelMap[aiDifficulty] ?? labelMap.scholar;
   }
 
   return {
@@ -221,7 +231,7 @@ export function previewMove(
     legal && state.variant === 'prime-trap' && classification.kind === 'prime'
       ? PRIME_TRAP_BONUS
       : 0;
-  const claimPoints = n + primeBonus;
+  const claimPoints = legal ? n + primeBonus : 0;
   const opponentPoints = opponentDivisors.reduce((acc, d) => acc + d, 0);
   const netSwing = claimPoints - opponentPoints;
 

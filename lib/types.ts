@@ -8,7 +8,7 @@ export type FactorVariant = 'classic' | 'prime-trap';
 
 export type TileOwner = 'unclaimed' | 'p1' | 'p2';
 
-export type NumberKind = 'unit' | 'prime' | 'deficient' | 'perfect' | 'abundant';
+export type NumberKind = 'unit' | 'prime' | 'deficient' | 'perfect' | 'abundant' | 'invalid';
 
 export interface TierSpec {
   id: AgeTier;
