@@ -90,7 +90,7 @@ function makeSession(kind: 'guest' | 'auth') {
     get trials() { return trials; },
     recordMatch(m: MatchRecord) {
       appendMatch(m);
-      credit(resolveGameIdFromMatch(m), m.tier, m.playerScore, m.arithmeticMeta?.accuracyPercent ?? 50, getLocalDateKey(new Date(m.playedAt)));
+      credit(resolveGameIdFromMatch(m) ?? 'factor-grid', m.tier, m.playerScore, m.arithmeticMeta?.accuracyPercent ?? 50, getLocalDateKey(new Date(m.playedAt)));
     },
     completeDaily(c: DailyChallengeCompletion) {
       upsertDailyCompletion(c);

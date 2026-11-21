@@ -59,7 +59,7 @@ import {
   type PlayableGameId,
 } from '@/lib/guest-trial';
 import {
-  appendMatch,
+  tryAppendMatch,
   clearAllLocalProgress,
   DEFAULT_PROFILE,
   loadDailyCompletions,
@@ -549,7 +549,12 @@ export default function NumbercraftApp() {
   );
 
   const handleClearLocalProgress = useCallback(() => {
-    clearAllLocalProgress();
+    clearAllLocalProgress(); // also clears guest trials + profile prefs
+    storedGuestTrialsRef.current = {};
+    setStoredGuestTrials({});
+    const resetProfile = loadProfile();
+    profileRef.current = resetProfile;
+    setProfile(resetProfile);
     earnedBadgesRef.current = [];
     matchesRef.current = [];
     dailyRef.current = [];
@@ -744,20 +749,27 @@ export default function NumbercraftApp() {
           }
         : record;
 
-      const updatedMatches = appendMatch(enrichedRecord);
+      const appended = tryAppendMatch(enrichedRecord);
+      const updatedMatches = appended.matches;
       matchesRef.current = updatedMatches;
       setMatches(updatedMatches);
+      if (!appended.saved) {
+        console.warn('Numbercraft: could not save this match (browser storage is full or blocked).');
+      }
 
-      // Track 1-level guest trial usage OR save score to Cloud Leaderboard for logged-in users
+      // Track 1-level guest trial usage OR save score to Cloud Leaderboard for logged-in users.
+      // Unknown titles map to null and are not credited; replays (same id) are not credited twice.
       const gameId = resolveGameIdFromMatch(enrichedRecord);
-      recordGuestTrialOrPersistCloudScore({
-        gameId,
-        tier: enrichedRecord.tier,
-        score: enrichedRecord.playerScore,
-        accuracyPercent: estimateMatchAccuracy(enrichedRecord),
-        dateKey: todayKey,
-        stats: buildMatchScoreStats(enrichedRecord),
-      });
+      if (gameId && appended.isNew) {
+        recordGuestTrialOrPersistCloudScore({
+          gameId,
+          tier: enrichedRecord.tier,
+          score: enrichedRecord.playerScore,
+          accuracyPercent: estimateMatchAccuracy(enrichedRecord),
+          dateKey: todayKey,
+          stats: buildMatchScoreStats(enrichedRecord),
+        });
+      }
 
       if (qualifiesForDailyMilestone && !wasCompletedBefore) {
         setConfettiTriggerKey((k) => k + 1);
@@ -774,7 +786,7 @@ export default function NumbercraftApp() {
         record.gameTitle === 'Equation Foundry' ||
         record.gameTitle === 'Odds & Urns'
       ) {
-        acc.problemsSolved += 5;
+        acc.problemsSolved += record.solvedProblems ?? 0;
         acc.problemsAttempted += 5;
       } else {
         acc.problemsSolved += record.result === 'win' ? 1 : 0;
@@ -828,22 +840,29 @@ export default function NumbercraftApp() {
       setDailyCompletions(updatedDaily);
 
       const dailyMatch = buildDailyMatchRecord(completion);
-      const updatedMatches = appendMatch(dailyMatch);
+      const appended = tryAppendMatch(dailyMatch);
+      const updatedMatches = appended.matches;
       matchesRef.current = updatedMatches;
       setMatches(updatedMatches);
+      if (!appended.saved) {
+        console.warn('Numbercraft: could not save the daily result (browser storage is full or blocked).');
+      }
 
       const attempts = Math.max(1, 3 + completion.mistakes);
       const accuracyPercent = Math.round(
         (completion.stepsSolved / attempts) * 100
       );
-      recordGuestTrialOrPersistCloudScore({
-        gameId: 'daily-challenge',
-        tier: completion.tier,
-        score: completion.score,
-        accuracyPercent,
-        dateKey: completion.dateKey,
-        stats: buildDailyScoreStats(completion),
-      });
+      // A replayed daily has the same match id: credit the trial / cloud score once.
+      if (appended.isNew) {
+        recordGuestTrialOrPersistCloudScore({
+          gameId: 'daily-challenge',
+          tier: completion.tier,
+          score: completion.score,
+          accuracyPercent,
+          dateKey: completion.dateKey,
+          stats: buildDailyScoreStats(completion),
+        });
+      }
 
       const acc = sessionAccumulatorRef.current;
       acc.matchesRecorded += 1;
