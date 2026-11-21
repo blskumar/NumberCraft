@@ -4,9 +4,6 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowRight,
-  Check,
-  Copy,
-  ExternalLink,
   Eye,
   EyeOff,
   KeyRound,
@@ -33,10 +30,12 @@ import {
 import { DAILY_PROBLEM_GOAL } from '@/lib/daily-goal';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import {
-  FIREBASE_AUTH_PROVIDERS_CONSOLE_URL,
+  checkEmailVerified,
+  deleteAccount,
   formatFirebaseAuthError,
   isEmailPasswordProviderDisabledError,
   registerWithEmail,
+  resendVerificationEmail,
   sendAccountPasswordReset,
   signInWithEmail,
   signOutAccount,
@@ -119,8 +118,6 @@ function AccountModalBody({
   const [nameInput, setNameInput] = useState(profile.displayName);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [providerSetupRequired, setProviderSetupRequired] = useState(false);
-  const [copiedConsoleUrl, setCopiedConsoleUrl] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Email & Password authentication fields
@@ -131,9 +128,24 @@ function AccountModalBody({
     profile.displayName === 'Guest Explorer' ? '' : profile.displayName
   );
   const [signupTier, setSignupTier] = useState<AgeTier>(profile.ageTier);
-  const [sharedDevice, setSharedDevice] = useState(
-    Boolean(profile.sharedDeviceMode)
-  );
+  // Child-safe default: session-only sign-in unless 'remember me' is ticked.
+  const [rememberMe, setRememberMe] = useState(false);
+  const sharedDevice = !rememberMe;
+  const [guardianConsent, setGuardianConsent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let alive = true;
+    checkEmailVerified()
+      .then((ok) => alive && setEmailVerified(ok))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isAuthenticated]);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [wipeSharedOnSignOut, setWipeSharedOnSignOut] = useState(false);
 
@@ -207,7 +219,6 @@ function AccountModalBody({
   async function handleEmailSignIn(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
-    setProviderSetupRequired(false);
     setStatusMessage(null);
     const cleanedEmail = emailInput.trim().toLowerCase();
     if (!cleanedEmail || !cleanedEmail.includes('@')) {
@@ -247,7 +258,12 @@ function AccountModalBody({
         'Signed in! Unlimited levels unlocked and your per-game scores will save to the Daily & Weekly Top 10 Leaderboards.'
       );
     } catch (err) {
-      setProviderSetupRequired(isEmailPasswordProviderDisabledError(err));
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        isEmailPasswordProviderDisabledError(err)
+      ) {
+        console.warn('Enable Email/Password sign-in in the Firebase console.');
+      }
       setErrorMessage(formatFirebaseAuthError(err));
     } finally {
       setIsSubmitting(false);
@@ -257,7 +273,6 @@ function AccountModalBody({
   async function handleEmailSignUp(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
-    setProviderSetupRequired(false);
     setStatusMessage(null);
     const cleanedName = signupName.trim();
     const cleanedEmail = emailInput.trim().toLowerCase();
@@ -272,6 +287,12 @@ function AccountModalBody({
     if (pwStrength.score < 3) {
       setErrorMessage(
         'Use at least 8 characters with both letters and numbers.'
+      );
+      return;
+    }
+    if (!guardianConsent) {
+      setErrorMessage(
+        'Please confirm that a parent or guardian agrees before creating an account.'
       );
       return;
     }
@@ -300,10 +321,16 @@ function AccountModalBody({
       setPasswordInput('');
       setSection('profile');
       setStatusMessage(
-        'Free account created! Unlimited levels unlocked across all 7 games, and your future scores will automatically post to the Daily & Weekly Top 10 Leaderboards.'
+        'Free account created! Check your email and click the verification link: your scores appear on the Top 10 leaderboards once your email is verified.'
       );
+      setEmailVerified(false);
     } catch (err) {
-      setProviderSetupRequired(isEmailPasswordProviderDisabledError(err));
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        isEmailPasswordProviderDisabledError(err)
+      ) {
+        console.warn('Enable Email/Password sign-in in the Firebase console.');
+      }
       setErrorMessage(formatFirebaseAuthError(err));
     } finally {
       setIsSubmitting(false);
@@ -358,6 +385,47 @@ function AccountModalBody({
         wipeSharedOnSignOut
           ? 'Signed out securely and cleared cached local progress for the next student.'
           : 'Signed out securely. You are now back in Guest Mode.'
+      );
+    } catch (err) {
+      setErrorMessage(formatFirebaseAuthError(err));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    setErrorMessage(null);
+    try {
+      await resendVerificationEmail();
+      setStatusMessage('Verification email sent. Check your inbox (and spam).');
+    } catch (err) {
+      setErrorMessage(formatFirebaseAuthError(err));
+    }
+  }
+
+  async function handleDeleteAccount(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setIsSubmitting(true);
+    try {
+      await deleteAccount(deletePassword);
+      onClearLocalProgress();
+      onUpdateProfile({
+        ...profile,
+        uid: null,
+        displayName: 'Guest Explorer',
+        sessionKind: 'guest',
+        authProvider: 'guest',
+        email: null,
+        sharedDeviceMode: false,
+        featuredBadgeId: null,
+      });
+      setNameInput('Guest Explorer');
+      setConfirmDelete(false);
+      setDeletePassword('');
+      setStatusMessage(
+        'Your account, profile and leaderboard scores were deleted.'
       );
     } catch (err) {
       setErrorMessage(formatFirebaseAuthError(err));
@@ -1011,6 +1079,86 @@ function AccountModalBody({
                     </div>
                   </div>
                 )}
+
+                {emailVerified === false && (
+                  <div
+                    data-testid="verify-email-notice"
+                    className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-3 text-xs text-[#78350F]"
+                  >
+                    <p className="font-semibold">Verify your email</p>
+                    <p className="mt-1 leading-relaxed">
+                      We sent a link to your email. Click it so your scores can
+                      appear on the leaderboard.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      className="mt-2 rounded-lg border border-[#D8D1C4] bg-white px-3 py-1.5 font-semibold text-[#1D4ED8]"
+                    >
+                      Send the email again
+                    </button>
+                  </div>
+                )}
+
+                {!confirmDelete ? (
+                  <button
+                    type="button"
+                    data-testid="delete-account-btn"
+                    onClick={() => setConfirmDelete(true)}
+                    className="block text-[11px] font-semibold text-[#BE123C] underline"
+                  >
+                    Delete my account
+                  </button>
+                ) : (
+                  <form
+                    onSubmit={handleDeleteAccount}
+                    className="space-y-2 rounded-lg border border-[#FECDD3] bg-[#FFF5F7] p-3.5"
+                  >
+                    <p className="text-xs font-semibold text-[#1C232B]">
+                      Delete account permanently
+                    </p>
+                    <p className="text-xs leading-relaxed text-[#5A6572]">
+                      This deletes your sign-in, profile and leaderboard
+                      scores. It cannot be undone. Enter your password to
+                      confirm.
+                    </p>
+                    <label
+                      htmlFor="delete-account-password"
+                      className="block text-xs font-semibold text-[#1C232B]"
+                    >
+                      Password
+                    </label>
+                    <input
+                      id="delete-account-password"
+                      type="password"
+                      required
+                      autoComplete="current-password"
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                      className="w-full rounded-lg border border-[#D8D1C4] bg-white px-3 py-2 text-sm text-[#1C232B]"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="submit"
+                        disabled={isSubmitting || !deletePassword}
+                        data-testid="confirm-delete-account-btn"
+                        className="rounded-lg bg-[#BE123C] px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        Delete forever
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmDelete(false);
+                          setDeletePassword('');
+                        }}
+                        className="rounded-lg border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-semibold text-[#5A6572]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             ) : (
               <>
@@ -1066,6 +1214,7 @@ function AccountModalBody({
                         <input
                           id="auth-signin-email"
                           type="email"
+                          autoComplete="email"
                           required
                           value={emailInput}
                           onChange={(e) => setEmailInput(e.target.value)}
@@ -1101,6 +1250,7 @@ function AccountModalBody({
                         />
                         <input
                           id="auth-signin-password"
+                          autoComplete="current-password"
                           type={showPassword ? 'text' : 'password'}
                           required
                           value={passwordInput}
@@ -1128,11 +1278,12 @@ function AccountModalBody({
                     <label className="flex cursor-pointer items-center gap-2 text-xs text-[#46515E]">
                       <input
                         type="checkbox"
-                        checked={sharedDevice}
-                        onChange={(e) => setSharedDevice(e.target.checked)}
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
                         className="h-3.5 w-3.5 rounded accent-[#1D4ED8]"
                       />
-                      Shared classroom computer (session-only sign-in)
+                      Keep me signed in on this device (not for shared
+                      computers)
                     </label>
 
                     <button
@@ -1163,9 +1314,16 @@ function AccountModalBody({
                         >
                           Display Name (Public)
                         </label>
+                        <p
+                          id="auth-signup-name-hint"
+                          className="text-[11px] text-[#5A6572]"
+                        >
+                          Do not use your real name.
+                        </p>
                         <input
                           id="auth-signup-name"
                           type="text"
+                          autoComplete="nickname"
                           required
                           maxLength={28}
                           value={signupName}
@@ -1220,6 +1378,7 @@ function AccountModalBody({
                         <input
                           id="auth-signup-email"
                           type="email"
+                          autoComplete="email"
                           required
                           value={emailInput}
                           onChange={(e) => setEmailInput(e.target.value)}
@@ -1243,6 +1402,7 @@ function AccountModalBody({
                         />
                         <input
                           id="auth-signup-password"
+                          autoComplete="new-password"
                           type={showPassword ? 'text' : 'password'}
                           required
                           value={passwordInput}
@@ -1278,12 +1438,35 @@ function AccountModalBody({
                     <label className="flex cursor-pointer items-center gap-2 text-xs text-[#46515E]">
                       <input
                         type="checkbox"
-                        checked={sharedDevice}
-                        onChange={(e) => setSharedDevice(e.target.checked)}
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
                         className="h-3.5 w-3.5 rounded accent-[#1D4ED8]"
                       />
-                      Shared computer (sign out automatically when tab closes)
+                      Keep me signed in on this device (not for shared
+                      computers)
                     </label>
+
+                    <label className="flex cursor-pointer items-start gap-2 text-xs text-[#1C232B]">
+                      <input
+                        type="checkbox"
+                        required
+                        data-testid="guardian-consent"
+                        checked={guardianConsent}
+                        onChange={(e) => setGuardianConsent(e.target.checked)}
+                        className="mt-0.5 h-3.5 w-3.5 rounded accent-[#1D4ED8]"
+                      />
+                      <span>
+                        A parent or guardian agrees that I can create this
+                        account (or I am an adult).
+                      </span>
+                    </label>
+                    <p className="text-[11px] leading-relaxed text-[#5A6572]">
+                      <strong>Privacy:</strong> we store your email, display
+                      name, age tier and game scores. Your display name, age
+                      tier and scores are visible to other signed-in players on
+                      the leaderboard. Your email is private. You can delete
+                      your account and scores at any time from your profile.
+                    </p>
 
                     <button
                       type="submit"
@@ -1322,6 +1505,7 @@ function AccountModalBody({
                       <input
                         id="auth-recovery-email"
                         type="email"
+                        autoComplete="email"
                         required
                         value={emailInput}
                         onChange={(e) => setEmailInput(e.target.value)}
@@ -1347,10 +1531,10 @@ function AccountModalBody({
                 )}
 
                 <p className="rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-3 py-2 text-[11px] leading-relaxed text-[#5A6572]">
-                  <strong>100% Free &amp; Private:</strong> Register with any
-                  email address — no payment ever required. Only your chosen
-                  display name appears on the Daily &amp; Weekly Top 10
-                  Leaderboards; your email is never shared publicly.
+                  <strong>Free, no payment ever.</strong> Your email is never
+                  shown to other players. Your display name, age tier and
+                  scores appear on the Top 10 leaderboards for signed-in
+                  players.
                 </p>
               </>
             )}
@@ -1364,84 +1548,6 @@ function AccountModalBody({
             className="mt-3 rounded-lg border border-[#FECDD3] bg-[#FFF5F7] px-3 py-2.5 text-xs font-medium text-[#BE123C]"
           >
             <p className="leading-relaxed">{errorMessage}</p>
-            {providerSetupRequired && (
-              <div className="mt-2.5 space-y-2 border-t border-[#FECDD3] pt-2.5 text-[11px] font-normal text-[#46515E]">
-                <ol className="list-decimal space-y-1 pl-4 leading-relaxed">
-                  <li>
-                    Open Firebase Console →{' '}
-                    <strong className="font-semibold text-[#1C232B]">
-                      Authentication → Sign-in method
-                    </strong>
-                    .
-                  </li>
-                  <li>
-                    Select{' '}
-                    <strong className="font-semibold text-[#1C232B]">
-                      Add new provider → Email/Password
-                    </strong>
-                    .
-                  </li>
-                  <li>
-                    Toggle{' '}
-                    <strong className="font-semibold text-[#1C232B]">
-                      Enable
-                    </strong>{' '}
-                    on, click{' '}
-                    <strong className="font-semibold text-[#1C232B]">
-                      Save
-                    </strong>
-                    , then submit this form again.
-                  </li>
-                </ol>
-                <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                  <a
-                    href={FIREBASE_AUTH_PROVIDERS_CONSOLE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[#D8D1C4] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#1D4ED8] hover:border-[#1D4ED8] whitespace-nowrap shrink-0"
-                  >
-                    Open Firebase Console
-                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        typeof navigator !== 'undefined' &&
-                        navigator.clipboard
-                      ) {
-                        void navigator.clipboard
-                          .writeText(FIREBASE_AUTH_PROVIDERS_CONSOLE_URL)
-                          .then(() => {
-                            setCopiedConsoleUrl(true);
-                            window.setTimeout(
-                              () => setCopiedConsoleUrl(false),
-                              2200
-                            );
-                          })
-                          .catch(() => {});
-                      }
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[#D8D1C4] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] whitespace-nowrap shrink-0"
-                  >
-                    {copiedConsoleUrl ? (
-                      <>
-                        <Check
-                          className="h-3 w-3 text-[#047857]"
-                          aria-hidden="true"
-                        />
-                        Copied URL
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-3 w-3" aria-hidden="true" />
-                        Copy Console URL
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
