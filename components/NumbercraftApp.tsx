@@ -42,7 +42,6 @@ import {
   fetchUserProfileDoc,
   saveCloudGameScore,
   subscribeToAuthState,
-  testFirestoreConnection,
   upsertUserProfileDoc,
 } from '@/lib/firebase';
 import {
@@ -351,10 +350,15 @@ export default function NumbercraftApp() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  // Validate Firestore connectivity once on boot + keep Firebase Email Auth in sync
-  useEffect(() => {
-    void testFirestoreConnection();
+  // Guests never load Firebase: start watching auth only once a signed-in
+  // profile is seen (restored from storage, or after sign-in).
+  const [watchAuth, setWatchAuth] = useState(false);
+  if (profile.sessionKind === 'authenticated' && !watchAuth) {
+    setWatchAuth(true);
+  }
 
+  useEffect(() => {
+    if (!watchAuth) return;
     const unsubscribe = subscribeToAuthState(async (firebaseUser) => {
       if (firebaseUser) {
         let remoteProfile = null;
@@ -406,7 +410,7 @@ export default function NumbercraftApp() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [watchAuth]);
 
   const achievementEvaluation = useMemo(
     () => evaluateAchievements(matches, earnedBadges, dailyCompletions),

@@ -79,17 +79,20 @@ export default function GameTopTenLeaderboard({
     const unsubscribe = subscribeToPeriodGameScores({
       period,
       todayKey,
+      signedIn: isSignedIn,
       onUpdate: (nextRecords) => {
         window.clearTimeout(startTimer);
         setRecords(nextRecords);
         setLoading(false);
         setLoadError(null);
       },
-      onError: () => {
+      onError: (message) => {
         window.clearTimeout(startTimer);
         setLoading(false);
         setLoadError(
-          'Live cloud scores are temporarily unavailable. Scores will appear once connected.'
+          isSignedIn
+            ? 'Live cloud scores are temporarily unavailable. Scores will appear once connected.'
+            : message
         );
       },
     });
@@ -98,7 +101,7 @@ export default function GameTopTenLeaderboard({
       window.clearTimeout(startTimer);
       unsubscribe();
     };
-  }, [period, todayKey]);
+  }, [period, todayKey, isSignedIn]);
 
   const board = useMemo(
     () =>
