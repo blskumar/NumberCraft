@@ -55,6 +55,8 @@ const VALID_BADGE_IDS = new Set<AchievementId>([
   'daily-lightning',
   'daily-flawless',
   'daily-streak-3',
+  'daily-streak-7',
+  'daily-streak-14',
 ]);
 
 export const DEFAULT_PROFILE: StudentProfile = {

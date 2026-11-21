@@ -152,9 +152,16 @@ export function computeDailyGoalProgress(params: {
     todayDateKey
   );
 
-  // Only seals that exist in ACHIEVEMENT_CATALOG may be named; the streak seal is Three-Day Scholar.
-  const nextStreakBadgeTitle = 'Three-Day Scholar';
-  const nextStreakTargetDays = 3;
+  // Names must match seals in ACHIEVEMENT_CATALOG (daily-streak-3 / -7 / -14).
+  let nextStreakBadgeTitle = 'Three-Day Scholar';
+  let nextStreakTargetDays = 3;
+  if (streakStats.currentStreak >= 7) {
+    nextStreakBadgeTitle = '14-Day Master Flame';
+    nextStreakTargetDays = 14;
+  } else if (streakStats.currentStreak >= 3) {
+    nextStreakBadgeTitle = '7-Day Consistent Compass';
+    nextStreakTargetDays = 7;
+  }
 
   const streakDaysRemaining = Math.max(
     0,

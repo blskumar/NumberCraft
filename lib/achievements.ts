@@ -64,7 +64,7 @@ export function getMasterySealProgressPercent(
   earnedCount: number,
   totalCount: number
 ): number {
-  if (totalCount <= 0 || !Number.isFinite(earnedCount)) return 0;
+  if (Number.isNaN(earnedCount) || Number.isNaN(totalCount) || totalCount <= 0) return 0;
   return Math.min(100, Math.max(0, Math.round((earnedCount / totalCount) * 100)));
 }
 
@@ -106,9 +106,15 @@ export interface RecentAchievementItem {
   fullDateLabel: string;
 }
 
+/** Date-only strings ('2026-03-09') are calendar days: parse as local so labels never shift a day. */
+function parseUnlockedAt(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
+}
+
 function formatEarnedDateLabel(unlockedAt: string | null): string {
   if (!unlockedAt) return 'Recently earned';
-  const parsed = new Date(unlockedAt);
+  const parsed = parseUnlockedAt(unlockedAt);
   if (Number.isNaN(parsed.getTime())) return 'Recently earned';
   return parsed.toLocaleDateString('en-US', {
     month: 'short',
@@ -118,7 +124,7 @@ function formatEarnedDateLabel(unlockedAt: string | null): string {
 
 function formatEarnedFullDateLabel(unlockedAt: string | null): string {
   if (!unlockedAt) return 'Date unavailable';
-  const parsed = new Date(unlockedAt);
+  const parsed = parseUnlockedAt(unlockedAt);
   if (Number.isNaN(parsed.getTime())) return 'Date unavailable';
   return parsed.toLocaleDateString('en-US', {
     month: 'short',
@@ -135,18 +141,20 @@ export function getRecentEarnedAchievements(
   evaluation: AchievementEvaluation,
   limit = 5
 ): RecentAchievementItem[] {
-  const safeLimit = Math.max(0, Math.floor(limit));
+  const safeLimit = Number.isNaN(limit) ? 5 : Math.max(0, Math.floor(limit));
   if (safeLimit === 0) return [];
 
   return evaluation.statuses
     .filter((status) => status.earned)
     .map((status, catalogIndex) => {
       const parsedMs = status.unlockedAt
-        ? Date.parse(status.unlockedAt)
+        ? parseUnlockedAt(status.unlockedAt).getTime()
         : Number.NaN;
       const unlockedTimestamp = Number.isFinite(parsedMs) ? parsedMs : 0;
       return {
         catalogIndex,
+        // undated items sort below every dated one, even pre-1970 dates
+        sortKey: Number.isFinite(parsedMs) ? parsedMs : Number.NEGATIVE_INFINITY,
         item: {
           id: status.definition.id,
           title: status.definition.title,
@@ -162,8 +170,8 @@ export function getRecentEarnedAchievements(
       };
     })
     .sort((a, b) => {
-      if (b.item.unlockedTimestamp !== a.item.unlockedTimestamp) {
-        return b.item.unlockedTimestamp - a.item.unlockedTimestamp;
+      if (b.sortKey !== a.sortKey) {
+        return b.sortKey > a.sortKey ? 1 : -1;
       }
       return a.catalogIndex - b.catalogIndex;
     })
@@ -275,6 +283,24 @@ export const ACHIEVEMENT_CATALOG: AchievementDefinition[] = [
       'Solve the Daily Math Challenge on 3 consecutive calendar days.',
     criteriaNote: '3-day daily streak',
     accent: 'ochre',
+  },
+  {
+    id: 'daily-streak-7',
+    title: '7-Day Consistent Compass',
+    shortTitle: '7-Day Daily',
+    description:
+      'Solve the Daily Math Challenge on 7 consecutive calendar days.',
+    criteriaNote: '7-day daily streak',
+    accent: 'cobalt',
+  },
+  {
+    id: 'daily-streak-14',
+    title: '14-Day Master Flame',
+    shortTitle: '14-Day Daily',
+    description:
+      'Solve the Daily Math Challenge on 14 consecutive calendar days.',
+    criteriaNote: '14-day daily streak',
+    accent: 'emerald',
   },
 ];
 
@@ -433,6 +459,19 @@ export function evaluateAchievements(
       ? solvedDailies[solvedDailies.length - 1] ?? null
       : null;
 
+  const streakSeal = (days: number) => {
+    const qualified = dailyStats.bestStreak >= days;
+    const trigger = qualified ? solvedDailies[solvedDailies.length - 1] ?? null : null;
+    return {
+      qualified,
+      unlockedAt: trigger?.completedAt,
+      triggerId: trigger ? `daily-${trigger.dateKey}` : undefined,
+      current: Math.min(days, dailyStats.bestStreak),
+      target: days,
+      progressLabel: `${Math.min(days, dailyStats.bestStreak)} / ${days} consecutive days`,
+    };
+  };
+
   const computedTriggers: Record<
     AchievementId,
     {
@@ -540,6 +579,8 @@ export function evaluateAchievements(
       target: 3,
       progressLabel: `${Math.min(3, dailyStats.bestStreak)} / 3 consecutive days`,
     },
+    'daily-streak-7': streakSeal(7),
+    'daily-streak-14': streakSeal(14),
   };
 
   const mergedRecords: EarnedBadgeRecord[] = [];

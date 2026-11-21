@@ -172,7 +172,9 @@ export type AchievementId =
   | 'daily-pioneer'
   | 'daily-lightning'
   | 'daily-flawless'
-  | 'daily-streak-3';
+  | 'daily-streak-3'
+  | 'daily-streak-7'
+  | 'daily-streak-14';
 
 export type AchievementAccent = 'cobalt' | 'emerald' | 'ochre';
 
