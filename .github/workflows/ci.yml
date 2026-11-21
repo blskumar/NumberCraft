@@ -1,0 +1,101 @@
+name: ci
+
+on:
+  push:
+    branches: [main, 'fix/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npx tsx --test lib/*.test.ts
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: |
+            .next
+            !.next/cache
+          retention-days: 3
+
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm install --no-audit --no-fund
+      - run: npm install --no-save @firebase/rules-unit-testing
+      - name: Rules emulator tests
+        run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-nc-ci "node --test firestore.rules.emu.test.mjs"
+      - name: Functions tests (when present)
+        run: |
+          if [ -f functions/package.json ]; then
+            npm --prefix functions install --no-audit --no-fund
+            npx --yes firebase-tools@14 emulators:exec --only firestore,auth,functions --project demo-nc-ci "npm --prefix functions test --if-present"
+          else
+            echo "functions/ not present"
+          fi
+
+  e2e-smoke:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: next-build
+          path: .next
+      - run: npm install --no-save @playwright/test
+      - run: npx playwright install --with-deps chromium
+      - name: Start built app
+        run: |
+          npx next start -p 3106 &
+          npx --yes wait-on@8 http://localhost:3106
+      - name: CSP + smoke
+        run: |
+          curl -sI http://localhost:3106/ | grep -i '^content-security-policy' | grep -vi "script-src[^;]*unsafe-inline"
+          cp scripts/e2e-csp-smoke.mjs ./e2e-csp-smoke.mjs
+          node e2e-csp-smoke.mjs http://localhost:3106
+
+  audit:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm audit (reported, non-blocking)
+        run: |
+          npm audit --omit=dev --json > npm-audit.json || true
+          npm audit --omit=dev || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit
+          path: npm-audit.json

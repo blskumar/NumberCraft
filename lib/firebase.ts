@@ -44,10 +44,41 @@ let dbPromise: Promise<Firestore> | null = null;
 
 export const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
 
+// ---- App Check (workstream G) -------------------------------------------
+// Enabled only when NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY is set at build
+// time; loaded via dynamic import so guests never download it.
+// Dev: NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN=true (or a registered token string).
+const APP_CHECK_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY;
+const APP_CHECK_DEBUG = process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN;
+
+async function initAppCheck(app: FirebaseApp): Promise<void> {
+  if (!APP_CHECK_SITE_KEY) return;
+  try {
+    if (IS_DEV && APP_CHECK_DEBUG) {
+      (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean | string })
+        .FIREBASE_APPCHECK_DEBUG_TOKEN =
+        APP_CHECK_DEBUG === 'true' ? true : APP_CHECK_DEBUG;
+    }
+    const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import(
+      'firebase/app-check'
+    );
+    initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch {
+    // Monitoring mode must never break the app; enforcement then rejects requests server-side.
+  }
+}
+// ---- end App Check --------------------------------------------------------
+
 function getFirebaseApp(): Promise<FirebaseApp> {
-  appPromise ??= import('firebase/app').then(({ getApps, initializeApp }) =>
-    getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig)
-  );
+  appPromise ??= import('firebase/app').then(async ({ getApps, initializeApp }) => {
+    if (getApps().length > 0) return getApps()[0];
+    const app = initializeApp(firebaseConfig);
+    await initAppCheck(app); // must precede Auth/Firestore use so tokens attach
+    return app;
+  });
   return appPromise;
 }
 
