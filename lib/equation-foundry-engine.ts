@@ -63,8 +63,15 @@ export const FOUNDRY_OPERATORS_BY_TIER: Record<AgeTier, FoundryOperator[]> = {
 };
 
 function seededRandom(seed: number): () => number {
-  let s = seed % 2147483647;
-  if (s <= 0) s += 2147483646;
+  // Hash the seed first: raw Park-Miller makes the first draws of small seeds near-constant.
+  // (`| 0` also turns NaN into 0, so degenerate round numbers still give a usable stream.)
+  let s = (Math.imul((seed | 0) ^ 0x9e3779b9, 0x85ebca6b) >>> 0) % 2147483646 + 1;
+  const next = () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+  next();
+  next();
   return () => {
     s = (s * 16807) % 2147483647;
     return (s - 1) / 2147483646;
@@ -443,6 +450,7 @@ export function generateFoundryPuzzle(
   let nums: number[];
   let target: number;
   let hintText: string;
+  let known: { expression: string; steps: string[] };
 
   if (tier === 'explorers') {
     // Construct a friendly guaranteed target: (a × b) ± c
@@ -454,6 +462,10 @@ export function generateFoundryPuzzle(
     const d = pick([1, 2, 3, 5, 7, 9]);
     const e = pick([4, 6, 8, 10]);
     nums = [a, b, c, d, e];
+    known = {
+      expression: `${a} × ${b} ${useAdd ? '+' : '−'} ${c}`,
+      steps: [`${a} × ${b} = ${a * b}`, `${a * b} ${useAdd ? '+' : '−'} ${c} = ${target}`],
+    };
     hintText = `Try multiplying ${a} × ${b} first (${a * b}), then ${useAdd ? 'add' : 'subtract'} ${c}.`;
   } else if (tier === 'challengers') {
     // Construct a guaranteed parenthesized target: (a + b) × c ± d
@@ -465,6 +477,10 @@ export function generateFoundryPuzzle(
     target = addD ? (a + b) * c + d : (a + b) * c - d;
     const e = pick([2, 3, 6, 12]);
     nums = [a, b, c, d, e];
+    known = {
+      expression: `(${a} + ${b}) × ${c} ${addD ? '+' : '−'} ${d}`,
+      steps: [`${a} + ${b} = ${a + b}`, `${a + b} × ${c} = ${(a + b) * c}`, `${(a + b) * c} ${addD ? '+' : '−'} ${d} = ${target}`],
+    };
     hintText = `Group (${a} + ${b}) = ${a + b}, multiply by ${c} to reach ${(a + b) * c}, then adjust by ${d}.`;
   } else {
     // Strategists: a² + (b × c) ± d
@@ -476,6 +492,10 @@ export function generateFoundryPuzzle(
     target = addD ? a * a + b * c + d : a * a + b * c - d;
     const e = pick([2, 3, 4, 8]);
     nums = [a, b, c, d, e];
+    known = {
+      expression: `${a}² + ${b} × ${c} ${addD ? '+' : '−'} ${d}`,
+      steps: [`${a}² = ${a * a}`, `${b} × ${c} = ${b * c}`, `${a * a + b * c} ${addD ? '+' : '−'} ${d} = ${target}`],
+    };
     hintText = `Start with ${a}² = ${a * a}, then combine ${b} × ${c} (${b * c}) and adjust by ${d}.`;
   }
 
@@ -490,7 +510,12 @@ export function generateFoundryPuzzle(
     value,
   }));
 
-  const solverSolution = solveFoundryPuzzle(tiles, target, tier);
+  // The search is capped, so fall back to the construction the puzzle was built from:
+  // every generated puzzle is guaranteed solvable.
+  const searched = solveFoundryPuzzle(tiles, target, tier);
+  const solverSolution: FoundrySolverResult = searched.exact
+    ? searched
+    : { ...known, value: target, exact: true, distance: 0 };
 
   return {
     id: `foundry-${tier}-r${roundNumber}-${seedOffset}`,
@@ -536,7 +561,8 @@ export function scoreFoundrySubmission(params: {
   }
 
   if (distance <= 15) {
-    const base = Math.round(30 - (distance - 5) * 2);
+    // continues from the 20 pts the first band ends on, so score never rises with distance
+    const base = Math.round(20 - (distance - 5) * 1.5);
     return {
       points: Math.max(5, base - Math.floor(hintPenalty / 2)),
       exact: false,
@@ -579,7 +605,9 @@ export function buildFoundryMatchRecord(params: {
   const opponentLabel =
     params.mode === 'solo'
       ? `Foundry Par (${params.roundsPlayed} rounds)`
-      : `Expression Solver AI (${params.aiDifficulty[0].toUpperCase()}${params.aiDifficulty.slice(1)})`;
+      : params.mode === 'local' || !params.aiDifficulty
+        ? 'Local Opponent'
+        : `Expression Solver AI (${params.aiDifficulty[0].toUpperCase()}${params.aiDifficulty.slice(1)})`;
 
   return {
     id: `foundry-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
