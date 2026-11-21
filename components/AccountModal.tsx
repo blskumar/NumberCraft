@@ -41,6 +41,7 @@ import {
   signOutAccount,
   upsertUserProfileDoc,
 } from '@/lib/firebase';
+import { MODERATION_MESSAGES, validateDisplayName } from '@/lib/name-moderation';
 import { playSoundPreviewChime } from '@/lib/sound';
 import type {
   AchievementId,
@@ -176,12 +177,14 @@ function AccountModalBody({
   async function handleSaveName(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
-    const cleaned = nameInput.trim();
-    if (!cleaned) {
-      setErrorMessage('Please enter a display name (at least 1 character).');
+    const nameCheck = validateDisplayName(nameInput);
+    if (!nameCheck.ok) {
+      setErrorMessage(
+        `${MODERATION_MESSAGES[nameCheck.reason!]} Try "${nameCheck.suggestion}".`
+      );
       return;
     }
-    const nextName = cleaned.slice(0, 28);
+    const nextName = nameCheck.clean;
     const updated: StudentProfile = { ...profile, displayName: nextName };
     onUpdateProfile(updated);
 
@@ -274,10 +277,13 @@ function AccountModalBody({
     e.preventDefault();
     setErrorMessage(null);
     setStatusMessage(null);
-    const cleanedName = signupName.trim();
+    const nameCheck = validateDisplayName(signupName);
+    const cleanedName = nameCheck.clean;
     const cleanedEmail = emailInput.trim().toLowerCase();
-    if (!cleanedName) {
-      setErrorMessage('Choose a display name (pseudonyms welcome).');
+    if (!nameCheck.ok) {
+      setErrorMessage(
+        `${MODERATION_MESSAGES[nameCheck.reason!]} Try "${nameCheck.suggestion}".`
+      );
       return;
     }
     if (!cleanedEmail || !cleanedEmail.includes('@')) {
