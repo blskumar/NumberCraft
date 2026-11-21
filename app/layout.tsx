@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Fraunces, Plus_Jakarta_Sans, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
+import LegalFooter from '@/components/LegalFooter';
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -62,6 +63,7 @@ export default function RootLayout({
         className="min-h-screen bg-[#FAF8F4] text-[#1C232B] font-sans antialiased selection:bg-[#1D4ED8]/15 selection:text-[#1D4ED8]"
       >
         {children}
+        <LegalFooter />
       </body>
     </html>
   );
