@@ -39,6 +39,7 @@ import {
   isMatchForDailyMilestoneArena,
 } from '@/lib/daily-milestone';
 import {
+  beginCloudRound,
   fetchUserProfileDoc,
   saveCloudGameScore,
   subscribeToAuthState,
@@ -85,6 +86,11 @@ import {
 } from '@/lib/session-tracker';
 import { playAchievementChime, playSoundPreviewChime } from '@/lib/sound';
 import { getStudioTabA11yMeta } from '@/lib/studio-a11y';
+import {
+  buildDailyScoreStats,
+  buildMatchScoreStats,
+  type ScoreStats,
+} from '@/lib/score-stats';
 import {
   applyThemeToDocument,
   loadThemePreference,
@@ -660,6 +666,17 @@ export default function NumbercraftApp() {
     ]
   );
 
+  // Server-timed round token: opened when a signed-in player enters a game
+  // screen (and re-opened after each submit by saveCloudGameScore). Guests and
+  // non-game tabs never touch Firebase.
+  const signedInUid =
+    profile.sessionKind === 'authenticated' ? profile.uid : undefined;
+  useEffect(() => {
+    if (!signedInUid) return;
+    const gameId = resolveGameIdForTab(activeTab, activeArithmeticGame);
+    if (gameId) void beginCloudRound(gameId, profileRef.current.ageTier);
+  }, [signedInUid, activeTab, activeArithmeticGame]);
+
   const recordGuestTrialOrPersistCloudScore = useCallback(
     (params: {
       gameId: PlayableGameId;
@@ -667,6 +684,7 @@ export default function NumbercraftApp() {
       score: number;
       accuracyPercent: number;
       dateKey: string;
+      stats: ScoreStats;
     }) => {
       const currentProfile = profileRef.current;
       const signedIn =
@@ -682,6 +700,7 @@ export default function NumbercraftApp() {
           score: params.score,
           accuracyPercent: params.accuracyPercent,
           dateKey: params.dateKey,
+          stats: params.stats,
         }).catch(() => {
           // Non-blocking cloud score write (logged by handleFirestoreError)
         });
@@ -730,6 +749,7 @@ export default function NumbercraftApp() {
         score: enrichedRecord.playerScore,
         accuracyPercent: estimateMatchAccuracy(enrichedRecord),
         dateKey: todayKey,
+        stats: buildMatchScoreStats(enrichedRecord),
       });
 
       if (qualifiesForDailyMilestone && !wasCompletedBefore) {
@@ -815,6 +835,7 @@ export default function NumbercraftApp() {
         score: completion.score,
         accuracyPercent,
         dateKey: completion.dateKey,
+        stats: buildDailyScoreStats(completion),
       });
 
       const acc = sessionAccumulatorRef.current;
