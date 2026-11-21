@@ -28,7 +28,7 @@ function capKeepingRealFirst<T>(items: T[], isSample: (x: T) => boolean, maxReal
   });
 }
 
-const isSampleMatchRecord = (m: MatchRecord) => m.id.startsWith('sample-');
+const isSampleMatchRecord = (m: MatchRecord) => typeof m?.id === 'string' && m.id.startsWith('sample-');
 const capMatches = (m: MatchRecord[]) => capKeepingRealFirst(m, isSampleMatchRecord, MAX_STORED_MATCHES);
 const capDaily = (d: DailyChallengeCompletion[]) => capKeepingRealFirst(d, (c) => c.isSample === true, MAX_STORED_DAILY);
 
