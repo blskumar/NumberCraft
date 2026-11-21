@@ -303,8 +303,8 @@ export async function resendVerificationEmail(): Promise<void> {
 }
 
 /**
- * Deletes the account: re-authenticates, then (best effort) the user's scores
- * and profile document, then the Auth user. No data export is offered.
+ * Deletes the account: re-authenticates, then (best effort) the profile
+ * document (scores/consents are erased by a Cloud Function), then the Auth user. No data export is offered.
  */
 export async function deleteAccount(password: string): Promise<void> {
   const [auth, a, fs, db] = await Promise.all([
@@ -321,14 +321,8 @@ export async function deleteAccount(password: string): Promise<void> {
     user,
     a.EmailAuthProvider.credential(user.email, password)
   );
-  try {
-    const scores = await fs.getDocs(
-      fs.query(fs.collection(db, 'gameScores'), fs.where('uid', '==', user.uid))
-    );
-    await Promise.all(scores.docs.map((d) => fs.deleteDoc(d.ref)));
-  } catch (error) {
-    if (IS_DEV) console.warn(`Score cleanup failed: ${errorCode(error)}`);
-  }
+  // Scores, rounds and consent records are erased server-side by the
+  // eraseUserData auth-trigger function (rules deny client deletes).
   try {
     await fs.deleteDoc(fs.doc(db, 'users', user.uid));
   } catch (error) {
@@ -388,51 +382,86 @@ export async function upsertUserProfileDoc(params: {
   }
 }
 
+// Callable functions are in Mumbai (see functions/src/index.ts).
+const FUNCTIONS_REGION = 'asia-south1';
+
+async function callFunction<T>(name: string, data: unknown): Promise<T> {
+  const [app, fn] = await Promise.all([getFirebaseApp(), import('firebase/functions')]);
+  const res = await fn.httpsCallable(fn.getFunctions(app, FUNCTIONS_REGION), name)(data);
+  return res.data as T;
+}
+
+/** One open round token per game, created by startRound (server-timed). */
+const openRounds = new Map<PlayableGameId, string>();
+
 /**
- * Saves (or raises) the signed-in user's best score for a game and day.
- * Doc id is deterministic: one doc per user, game and day.
+ * Asks the server to open a round for this game (call when the player
+ * enters a game screen; replaced automatically after each submit). Best
+ * effort: failures (no consent, unverified email, offline) just mean the
+ * score will not be posted. Guests must not call this.
+ */
+export async function beginCloudRound(gameId: PlayableGameId, tier: AgeTier): Promise<void> {
+  try {
+    const auth = await getFirebaseAuth();
+    if (!auth.currentUser) return;
+    const { roundId } = await callFunction<{ roundId: string }>('startRound', { gameId, tier });
+    openRounds.set(gameId, roundId);
+  } catch (error) {
+    openRounds.delete(gameId);
+    if (IS_DEV) console.warn(`startRound failed: ${errorCode(error)}`);
+  }
+}
+
+export interface CloudScoreResult {
+  saved: boolean;
+  best: number;
+  scoreId: string;
+}
+
+/**
+ * Submits a finished round. The SERVER decides the document id, date, name
+ * and whether the score is plausible (functions/src/scores.ts); the client
+ * cannot write gameScores (rules deny it). `displayName`/`dateKey` are
+ * accepted for call-site compatibility but are not sent.
  */
 export async function saveCloudGameScore(params: {
   uid: string;
-  displayName: string;
+  displayName?: string;
   gameId: PlayableGameId;
   tier: AgeTier;
   score: number;
   accuracyPercent: number;
   dateKey?: string;
-}): Promise<string> {
-  // weekKey/visibility are no longer stored; the week is derived on read.
-  const sanitized = buildSanitizedScorePayload(params);
-  const payload: Record<string, unknown> = { ...sanitized };
-  delete payload.weekKey;
-  delete payload.visibility;
-  const scoreId = `${sanitized.uid}_${sanitized.gameId}_${sanitized.dateKey}`;
-  const path = `gameScores/${scoreId}`;
-
+  stats?: Record<string, number | string | boolean | number[]>;
+}): Promise<CloudScoreResult> {
+  const sanitized = buildSanitizedScorePayload({
+    ...params,
+    displayName: params.displayName ?? 'Player',
+  });
+  const roundId = openRounds.get(sanitized.gameId);
+  openRounds.delete(sanitized.gameId);
   try {
-    const [auth, db, fs] = await Promise.all([
-      getFirebaseAuth(),
-      getFirebaseDb(),
-      import('firebase/firestore'),
-    ]);
+    const auth = await getFirebaseAuth();
     if (!auth.currentUser || auth.currentUser.uid !== sanitized.uid) {
       throw new AppAuthError('app/not-signed-in', 'Sign in to save scores.');
     }
-    if (!(await checkEmailVerified())) {
-      throw new AppAuthError(
-        'app/email-not-verified',
-        'Verify your email to appear on the leaderboard.'
-      );
+    if (!roundId) {
+      throw new AppAuthError('app/no-round', 'Score was not saved (no active round).');
     }
-    const ref = fs.doc(db, 'gameScores', scoreId);
-    const existing = await fs.getDoc(ref);
-    const prev = existing.exists() ? existing.data().score : -1;
-    if (typeof prev === 'number' && prev >= sanitized.score) return scoreId;
-    await fs.setDoc(ref, { ...payload, createdAt: fs.serverTimestamp() });
-    return scoreId;
+    const result = await callFunction<CloudScoreResult>('submitScore', {
+      roundId,
+      score: sanitized.score,
+      accuracyPercent: sanitized.accuracyPercent,
+      stats: params.stats ?? {},
+    });
+    return result;
   } catch (error) {
     if (error instanceof AppAuthError) throw error;
-    handleFirestoreError(error, OperationType.CREATE, path);
+    if (IS_DEV) console.warn(`submitScore failed: ${errorCode(error)}`);
+    throw new AppAuthError('app/score-rejected', 'Score could not be saved right now.');
+  } finally {
+    // Next replay of this game gets a fresh server-timed round.
+    void beginCloudRound(sanitized.gameId, sanitized.tier);
   }
 }
 

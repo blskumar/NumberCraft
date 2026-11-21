@@ -18,6 +18,9 @@ before(async () => {
     await setDoc(doc(db, 'rounds', 'u1_r1'), { uid: 'u1', gameId: 'addition-attack', status: 'open' });
     await setDoc(doc(db, 'scoreFlags', 'f1'), { uid: 'u1', reason: 'x' });
     await setDoc(doc(db, 'rateLimits', 'u1'), { n: 1 });
+    await setDoc(doc(db, 'consentRequests', 'h1'), { uid: 'u1', type: 'parent' });
+    await setDoc(doc(db, 'consentArchive', 'h1'), { status: 'erased' });
+    await setDoc(doc(db, 'consents', 'u1'), { uid: 'u1', status: 'pending-parental-consent', version: 'v' });
   });
 });
 after(async () => { await env?.cleanup(); });
@@ -50,7 +53,7 @@ test('gameScores: update (raise) and delete denied even for owner', async () => 
 });
 
 // ---- server-only collections ----
-for (const [c, d] of [['rounds', 'u1_r1'], ['scoreFlags', 'f1'], ['rateLimits', 'u1']]) {
+for (const [c, d] of [['rounds', 'u1_r1'], ['scoreFlags', 'f1'], ['rateLimits', 'u1'], ['consentRequests', 'h1'], ['consentArchive', 'h1']]) {
   test(`${c}: no client read/write/delete (even owner, verified)`, async () => {
     const db = ctx('u1');
     await assertFails(getDoc(doc(db, c, d)));
@@ -85,4 +88,20 @@ test('users: cross-read, list, extra field denied; own delete ok', async () => {
 test('users: other-uid create and unauthenticated denied', async () => {
   await assertFails(setDoc(doc(ctx('u1'), 'users', 'u3'), prof('u3')));
   await assertFails(setDoc(doc(anon(), 'users', 'u9'), prof('u9')));
+});
+
+// ---- consents: owner may read own status; nobody writes from the client ----
+test('consents: owner get ok; others/anon/list denied; every client write denied', async () => {
+  await assertSucceeds(getDoc(doc(ctx('u1'), 'consents', 'u1')));
+  await assertFails(getDoc(doc(ctx('u2'), 'consents', 'u1')));
+  await assertFails(getDoc(doc(anon(), 'consents', 'u1')));
+  await assertFails(getDocs(collection(ctx('u1'), 'consents')));
+  const granted = { uid: 'u1', ageBand: 'minor', status: 'granted', version: '2026-11-v1', purposes: [], method: 'parent-email-link', grantedAt: serverTimestamp(), withdrawnAt: null };
+  await assertFails(setDoc(doc(ctx('u1'), 'consents', 'u1'), granted));
+  await assertFails(updateDoc(doc(ctx('u1'), 'consents', 'u1'), { status: 'granted' }));
+  await assertFails(deleteDoc(doc(ctx('u1'), 'consents', 'u1')));
+  await assertFails(setDoc(doc(ctx('u2'), 'consents', 'u2'), { ...granted, uid: 'u2' }));
+});
+test('consentRequests: client cannot self-create a request or read one (callable only)', async () => {
+  await assertFails(setDoc(doc(ctx('u1'), 'consentRequests', 'u1'), { uid: 'u1', parentEmail: 'p@m.co', type: 'parent' }));
 });

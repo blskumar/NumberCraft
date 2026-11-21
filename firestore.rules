@@ -150,5 +150,19 @@ service cloud.firestore {
     match /rateLimits/{uid} {
       allow read, write: if false;
     }
+    match /consentRequests/{id} {
+      allow read, write: if false;
+    }
+    match /consentArchive/{id} {
+      allow read, write: if false;
+    }
+
+    // Consent record: the owner may READ their own status; only the backend
+    // (requestParentalConsent / confirmParentalConsent / recordSelfConsent /
+    // withdrawConsent functions) writes it. Scores require status granted.
+    match /consents/{uid} {
+      allow get: if isSignedIn() && isOwner(uid);
+      allow list, create, update, delete: if false;
+    }
   }
 }

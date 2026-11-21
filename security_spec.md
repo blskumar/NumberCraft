@@ -1,26 +1,33 @@
 # Numbercraft Firestore Security Specification
 
 ## 1. Data invariants
-1. **Private profiles (`/users/{userId}`)**: only the authenticated owner may get, create, update or delete. `list` is denied. The stored `email` must equal `request.auth.token.email`.
+1. **Private profiles (`/users/{userId}`)**: only the authenticated owner may get, create, update or delete. `list` is denied. The stored `email` must equal `request.auth.token.email`. `displayName` must pass a rules-level check (2-20 chars, letters of any script, combining marks, digits, space `- _ .`; no leading/trailing space). Profanity, PII and impersonation checks cannot be written in rules and run in `lib/name-moderation.ts` (client) and again in the `submitScore` function.
 2. **Identity integrity**: `uid` must equal `request.auth.uid` on create; `uid` and `createdAt` cannot change on update.
-3. **One score per user, game and day (`/gameScores/{uid}_{gameId}_{dateKey}`)**: the document id is deterministic, so an account cannot flood the board. A score can only be RAISED (best-of-day); lowering or editing other fields is denied. `createdAt` is set to `request.time` on each raise. Scores need a verified email (`email_verified`).
-4. **Bounded values**: `0 <= score <= 100000`, `0 <= accuracyPercent <= 100`, `gameId` from the allowlist, `gameTitle` bound to `gameId`, `dateKey` must be the server UTC day +/- 1 (covers client time zones). `weekKey` is not stored; the week is derived client-side from `dateKey`.
-5. **No impersonation**: `displayName` on a score must equal `users/{uid}.displayName` (checked with `get()`).
-6. **Server time**: `createdAt` / `updatedAt` must equal `request.time`.
-7. **Erasure**: an owner may delete their own profile and scores (account deletion). The score ledger is therefore NOT append-only; the deterministic id limits abuse to one doc per user/game/day.
+3. **Scores are server-written only (`/gameScores/{uid}_{gameId}_{serverUTCDate}`)**: clients get `read` (signed-in) but **no create/update/delete**. The `submitScore` Cloud Function (Admin SDK) validates and writes one best-of-day document per user, game and day.
+4. **Server-only collections**: `rounds` (server-timed round tokens, TTL), `scoreFlags` (anomalies, admin only), `rateLimits`, `consentRequests`, `consentArchive`: no client access at all.
+5. **Consent (`/consents/{uid}`)**: the owner may `get` their own status; **no client writes**. Only the backend writes it (see section 5).
+6. **No impersonation**: the name on a score is read from `users/{uid}` by the function and re-moderated; a blocked name is replaced by a generated one.
+7. **Erasure**: the `eraseUserData` Auth-trigger function deletes scores, rounds, flags, consent requests and the profile when the account is deleted; the consent evidence is archived under a salted hash of the uid (retention to be confirmed by counsel).
 
 ## 2. What is public (be honest)
-Scores are readable by **any signed-in user** (no anonymous reads). Each score exposes: `uid` (stable Firebase UID), `displayName`, age `tier` (the `explorers` tier implies a young child), `gameId`, `score`, `accuracyPercent`, `dateKey`. Email is never stored on scores. This is **not** "zero-PII": the display name is chosen by the child and shown to other signed-in players. The UI tells users not to use their real name.
+Scores are readable by **any signed-in user** (no anonymous reads). Each score exposes: `uid` (stable Firebase UID), `displayName`, age `tier` (the `explorers` tier implies a young child), `gameId`, `score`, `accuracyPercent`, `dateKey`. Email is never stored on scores. This is **not** "zero-PII". Only users with a current granted consent record ever get a score document, so nobody without consent appears on the board.
 
-## 3. Residual risks (need backend / console / legal action by the owner)
-- **Scores are client-asserted.** Rules cannot verify gameplay. Any verified account can post up to 100000 for itself. Real anti-cheat needs a trusted backend (Cloud Function or Admin SDK validating scores). Not built here.
-- **Sybil accounts**: many free accounts can still fill the leaderboard window (`limit(250)`). Enable App Check and Auth quotas in the console.
-- **Display-name moderation**: no profanity filter; names are free text (1-28 chars).
-- **Delete then re-post** the same day is possible (the id is free again after delete).
-- **Child consent / COPPA / GDPR-K**: the UI adds a guardian-consent checkbox and privacy notice, but this is not legal verification of parental consent. Legal review is required before launch to under-13/16 users.
-- Enable Firebase Auth email-enumeration protection, restrict the API key by HTTP referrer, and enable App Check (console actions).
+## 3. Score validation and its limits
+The server cannot replay the game. `submitScore` checks: verified email, current granted consent, an open, owned, unexpired server-issued round, server-measured elapsed time, per-game hard score bound derived from the engine constants, accuracy consistent with stats, per-uid daily caps and one open round per uid+game. Anomalies are written to `scoreFlags`. Residual: a forged but plausible score under the hard bound is accepted; Odds & Urns bounds and p99 flags are heuristic; sybil accounts can still fill the board (enable App Check, Auth quotas). Factor Grid solo supports move-log replay on the server; other games need seeded RNG and move logs. Details: `functions/README.md`.
 
-## 4. Adversarial cases covered by the emulator test (`firestore.rules.emu.test.mjs`)
-Unauthenticated read/write denied; uid spoofing; ghost/legacy fields (`weekKey`, `isAdmin`); random doc id or id not matching uid/game/date; lower or equal score update; editing non-score fields; unverified email; displayName not matching profile; gameTitle not matching gameId; score out of bounds; dateKey far past/future or malformed; forged `createdAt`; cross-user delete; profile email not matching token; cross-user profile read; `users` list; extra profile fields.
+## 4. Other residual risks (owner action)
+- Enable App Check (set `ENFORCE_APP_CHECK=true` on the functions once the client ships it), Auth email-enumeration protection, API-key referrer restriction.
+- A child who self-declares adult is not detected (age is not verified). Without consent a user has no cloud presence. Legal review (DPDP s.9, Rule 10) decides whether email-link verification is sufficient.
+- The leaderboard day is the server UTC date.
 
-Run: start the Firestore emulator (needs JDK 21+) and `node --test firestore.rules.emu.test.mjs` with `@firebase/rules-unit-testing` installed (not a project dependency).
+## 5. Parental consent flow (docs/legal/04 has the legal spec)
+1. Sign-up asks the age band only. Adults call `recordSelfConsent` (status `granted`, method `self`).
+2. A minor calls `requestParentalConsent({parentEmail})`. The function checks the address (not the child's own), rate limits (3 per child per 24 h, 5 per parent address per day), writes `consents/{uid}` as `pending-parental-consent`, stores the SHA-256 of a random 256-bit token in `consentRequests/{hash}` (7-day TTL, parent email kept only until the decision) and sends the link through the `Mailer` interface.
+3. The parent opens `confirmParentalConsent?t=token`, sees the notice and the child's display name only, and chooses Yes or No (POST). The token is single use. Yes writes `consents/{uid}` `{status: granted, method: parent-email-link, version, grantedAt}`, deletes the request and emails a receipt with a withdrawal link (a new single-use token, 1-year validity).
+4. While status is not `granted` for the current `CONSENT_VERSION` (pending, declined, expired, withdrawn, version bump, no record), `startRound` and `submitScore` fail with `consent-required` and no score document exists. Withdrawal (parent link or `withdrawConsent`) erases scores. Account deletion triggers `eraseUserData`.
+5. Rules: clients cannot create, update or delete `consents`/`consentRequests`; only the owner can read their own `consents` doc.
+
+## 6. Tests
+- `firestore.rules.emu.test.mjs` (15 cases): signed-in reads, every client write to `gameScores`, `rounds`, `scoreFlags`, `rateLimits`, `consentRequests`, `consentArchive`, `consents` denied, displayName rules check, email/token match, cross-user access.
+- `functions/test/functions.test.ts` (25 cases, Firestore emulator): happy path, replay of a round id, forged score, too-fast round, unverified email, wrong owner, rate limits, best-of-day, expired round, name re-moderation, consent gating, the full parent consent flow (request, confirm, single use, decline, expiry, withdraw, erase), rate limits, replay verification.
+- Run with the Firestore emulator (JDK 21+): `firebase emulators:exec --only firestore "node --test ..."`.

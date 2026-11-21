@@ -1,0 +1,21 @@
+{
+  "name": "numbercraft-functions",
+  "private": true,
+  "description": "Server-side score validation, name moderation and parental-consent backend",
+  "main": "dist/src/index.js",
+  "engines": { "node": "20" },
+  "scripts": {
+    "sync-shared": "node scripts/sync-shared.mjs",
+    "build": "node scripts/sync-shared.mjs && tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/functions.test.js",
+    "deploy": "echo 'Deploy is a human step: firebase deploy --only functions' && exit 1"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "5.9.3"
+  }
+}
