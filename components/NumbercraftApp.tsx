@@ -95,6 +95,7 @@ import {
 import {
   applyThemeToDocument,
   loadThemePreference,
+  readStoredThemePreference,
   saveThemePreference,
 } from '@/lib/theme';
 import type {
@@ -316,8 +317,8 @@ export default function NumbercraftApp() {
       const loadedBadges = loadEarnedBadges();
       const loadedDaily = loadDailyCompletions();
       const loadedGuestTrials = loadGuestTrialUsage();
-      const loadedTheme =
-        loadedProfile.themePreference ?? loadThemePreference();
+      // Single source of truth: the theme key wins over the profile mirror.
+      const loadedTheme = readStoredThemePreference() ?? loadedProfile.themePreference ?? loadThemePreference();
       applyThemeToDocument(loadedTheme);
       setThemePreference(loadedTheme);
 
@@ -365,7 +366,8 @@ export default function NumbercraftApp() {
   }
 
   useEffect(() => {
-    if (!watchAuth) return;
+    // Wait for hydration so the auth callback never overwrites the stored profile.
+    if (!watchAuth || !hydrated) return;
     const unsubscribe = subscribeToAuthState(async (firebaseUser) => {
       if (firebaseUser) {
         let remoteProfile = null;
@@ -417,7 +419,7 @@ export default function NumbercraftApp() {
     });
 
     return () => unsubscribe();
-  }, [watchAuth]);
+  }, [watchAuth, hydrated]);
 
   const achievementEvaluation = useMemo(
     () => evaluateAchievements(matches, earnedBadges, dailyCompletions),
@@ -477,7 +479,10 @@ export default function NumbercraftApp() {
         return;
       }
 
-      if (isActiveGameTab(activeTab)) {
+      const idleVisit =
+        sessionAccumulatorRef.current.problemsAttempted === 0 &&
+        sessionAccumulatorRef.current.matchesRecorded === 0;
+      if (isActiveGameTab(activeTab) && !idleVisit) {
         const acc = sessionAccumulatorRef.current;
         const summary = buildEndOfSessionSummary({
           arenaTab: activeTab,
@@ -1006,6 +1011,7 @@ export default function NumbercraftApp() {
       {/* Canvas-based celebratory confetti overlay on badge unlock & daily solve */}
       <ConfettiCelebration triggerKey={confettiTriggerKey} />
 
+      <div role="region" aria-label="Mastery progress">
       <MasteryProgressBar
         earnedCount={achievementEvaluation.earnedCount}
         totalCount={achievementEvaluation.totalCount}
@@ -1015,6 +1021,7 @@ export default function NumbercraftApp() {
         latestUnlockedTitle={latestUnlockedSealTitle}
         isHydrated={hydrated}
       />
+      </div>
 
       <TopNav
         activeTab={activeTab}
@@ -1038,8 +1045,6 @@ export default function NumbercraftApp() {
         id="studio-active-container"
         data-testid="studio-active-region"
         data-active-tab={activeTab}
-        role="region"
-        aria-label={activeTabA11y.regionLabel}
         aria-describedby="studio-tab-announcer"
         aria-busy={!hydrated}
         tabIndex={-1}
@@ -1049,8 +1054,6 @@ export default function NumbercraftApp() {
           <motion.div
             key={activeTab}
             id={activeTabA11y.containerId}
-            role="region"
-            aria-label={activeTabA11y.regionLabel}
             aria-roledescription={
               activeTabA11y.isGameArena ? 'interactive math game' : undefined
             }
@@ -1084,7 +1087,7 @@ export default function NumbercraftApp() {
             {activeTab === 'daily' && (
               <div
                 data-testid="game-container-daily"
-                role="region"
+                role="group"
                 aria-label="Daily Math Challenge Interactive Game"
               >
                 <span className="sr-only" aria-live="polite">
@@ -1125,7 +1128,7 @@ export default function NumbercraftApp() {
             {activeTab === 'play-arithmetic' && (
               <div
                 data-testid="game-container-arithmetic"
-                role="region"
+                role="group"
                 aria-label={activeTabA11y.regionLabel}
               >
                 <span className="sr-only" aria-live="polite">
@@ -1153,7 +1156,7 @@ export default function NumbercraftApp() {
               (!autoStartParam || hydrated) && (
                 <div
                   data-testid="game-container-factor-grid"
-                  role="region"
+                  role="group"
                   aria-label="Factor Grid Strategy Interactive Game"
                 >
                   <span className="sr-only" aria-live="polite">
@@ -1181,7 +1184,7 @@ export default function NumbercraftApp() {
             {activeTab === 'play-equation-foundry' && (
               <div
                 data-testid="game-container-equation-foundry"
-                role="region"
+                role="group"
                 aria-label="Equation Foundry Expression Interactive Game"
               >
                 <span className="sr-only" aria-live="polite">
@@ -1207,7 +1210,7 @@ export default function NumbercraftApp() {
             {activeTab === 'play-odds-urns' && (
               <div
                 data-testid="game-container-odds-urns"
-                role="region"
+                role="group"
                 aria-label="Odds and Urns Modular Probability Interactive Game"
               >
                 <span className="sr-only" aria-live="polite">

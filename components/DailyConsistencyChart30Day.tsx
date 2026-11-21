@@ -1,5 +1,6 @@
 'use client';
 
+import ChartA11y from '@/components/ChartA11y';
 import { useState } from 'react';
 import {
   Bar,
@@ -183,7 +184,7 @@ export default function DailyConsistencyChart30Day({
           <div
             role="tablist"
             aria-label="30-day chart granularity"
-            className="flex items-center gap-1 rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1"
+            className="flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1"
           >
             <button
               type="button"
@@ -290,6 +291,7 @@ export default function DailyConsistencyChart30Day({
 
       {/* Recharts Bar Chart Viewport */}
       <div className="mt-4 h-[235px] w-full">
+              <ChartA11y label="Daily consistency, last 30 days" data={(chartMode === 'daily-30' ? data.points : data.weeklyBuckets) as never} />
         <ResponsiveContainer width="100%" height="100%">
           {chartMode === 'daily-30' ? (
             <BarChart

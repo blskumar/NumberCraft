@@ -356,7 +356,7 @@ export default function MasteryProgressBar({
                       className="flex items-center justify-between gap-3 py-2.5 text-xs"
                     >
                       <div className="flex min-w-0 items-center gap-3">
-                        <span className="w-5 shrink-0 font-mono text-[11px] font-semibold text-[#7A8490] tabular-nums">
+                        <span className="w-5 shrink-0 font-mono text-[11px] font-semibold text-[#5A6572] tabular-nums">
                           {String(idx + 1).padStart(2, '0')}
                         </span>
                         <AchievementSealIcon
@@ -385,7 +385,7 @@ export default function MasteryProgressBar({
 
                       <div className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[11px] text-[#46515E] tabular-nums whitespace-nowrap">
                         <Calendar
-                          className="h-3 w-3 text-[#7A8490]"
+                          className="h-3 w-3 text-[#5A6572]"
                           aria-hidden="true"
                         />
                         <span>{item.fullDateLabel}</span>

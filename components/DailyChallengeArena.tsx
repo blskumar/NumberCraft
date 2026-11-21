@@ -645,7 +645,7 @@ export default function DailyChallengeArena({
                         ? 'border-[#047857]/40 bg-[#ECFDF5] text-[#047857]'
                         : slot.isToday
                           ? 'border-[#B45309]/50 bg-[#FFFBEB] text-[#1C232B]'
-                          : 'border-[#E5E0D5] bg-[#FAF8F4] text-[#7A8490]'
+                          : 'border-[#E5E0D5] bg-[#FAF8F4] text-[#5A6572]'
                     }`}
                   >
                     <span className="text-[10px] font-semibold uppercase tracking-wide">

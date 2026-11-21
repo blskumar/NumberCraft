@@ -165,7 +165,7 @@ export default function MasterySealsSection({
                       className={`text-right font-mono text-[11px] font-medium tabular-nums ${
                         earned
                           ? TEXT_BY_ACCENT[definition.accent]
-                          : 'text-[#7A8490]'
+                          : 'text-[#5A6572]'
                       }`}
                     >
                       {earned

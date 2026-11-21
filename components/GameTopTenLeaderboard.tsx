@@ -153,7 +153,7 @@ export default function GameTopTenLeaderboard({
         <div
           role="tablist"
           aria-label="Leaderboard time period"
-          className="inline-flex items-center gap-1 self-start rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1 lg:self-auto"
+          className="inline-flex max-w-full flex-wrap items-center gap-1 self-start rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1 lg:self-auto"
         >
           <button
             type="button"
@@ -333,7 +333,7 @@ export default function GameTopTenLeaderboard({
           </div>
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Scrollable table">
           <table className="w-full min-w-[580px] border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-[#ECE7DD] text-[11px] font-semibold text-[#5A6572]">

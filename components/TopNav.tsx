@@ -172,7 +172,6 @@ export default function TopNav({
               type="button"
               data-testid="topnav-profile-button"
               onClick={onOpenAccount}
-              aria-label="Open student profile and mastery seals"
               className="inline-flex items-center gap-1.5 sm:gap-2 rounded-lg border border-[#D8D1C4] bg-white px-2.5 sm:px-3.5 py-2 text-xs font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors whitespace-nowrap min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
             >
               {earnedSealCount > 0 ? (
@@ -194,6 +193,7 @@ export default function TopNav({
               <span className="max-w-[88px] sm:max-w-[180px] truncate">
                 {accountLabel}
               </span>
+              <span className="sr-only"> (open student profile and mastery seals)</span>
             </button>
           </Tooltip>
         </div>

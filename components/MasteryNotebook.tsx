@@ -167,7 +167,7 @@ export default function MasteryNotebook({
             <p className="mt-2 font-mono text-3xl font-semibold text-[#1C232B] tabular-nums">
               {stat.value}
             </p>
-            <p className="mt-1 text-[11px] text-[#7A8490]">{stat.sub}</p>
+            <p className="mt-1 text-[11px] text-[#5A6572]">{stat.sub}</p>
           </div>
         ))}
       </section>
@@ -250,7 +250,7 @@ export default function MasteryNotebook({
             </button>
           </div>
         ) : (
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Scrollable table">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[#ECE7DD] text-xs text-[#5A6572]">

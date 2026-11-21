@@ -1,5 +1,6 @@
 'use client';
 
+import ChartA11y from '@/components/ChartA11y';
 import { useMemo, useState } from 'react';
 import {
   Area,
@@ -377,6 +378,7 @@ export default function PerformanceTrendsChart({
         ) : chartView === 'timeline' ? (
           <>
             <div className="h-[290px] w-full">
+              <ChartA11y label="Match score timeline" data={timeline as never} />
               <ResponsiveContainer width="100%" height="100%" minHeight={260}>
                 <ComposedChart
                   data={timeline}
@@ -566,6 +568,7 @@ export default function PerformanceTrendsChart({
         ) : chartView === 'tiers' ? (
           <>
             <div className="h-[290px] w-full">
+              <ChartA11y label="Performance by age tier" data={tierBreakdown as never} />
               <ResponsiveContainer width="100%" height="100%" minHeight={260}>
                 <BarChart
                   data={tierBreakdown}
@@ -656,6 +659,7 @@ export default function PerformanceTrendsChart({
         ) : (
           <>
             <div className="h-[290px] w-full">
+              <ChartA11y label="Performance by game mode" data={modeBreakdown as never} />
               <ResponsiveContainer width="100%" height="100%" minHeight={260}>
                 <BarChart
                   data={modeBreakdown}
