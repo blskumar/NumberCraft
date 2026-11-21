@@ -1,37 +1,25 @@
-// Client side of parental consent. The backend (spec: docs/legal/04) sends the
-// parent email, verifies the token and writes consents/{uid}. The client may
-// only create a consent REQUEST and read its own consent record.
-import firebaseConfig from '@/firebase-applet-config.json';
+// Client side of consent. All consent WRITES go through Cloud Functions
+// (functions/src/consent.ts): the client cannot write consents/ or
+// consentRequests/ (rules deny it). The client only calls the callables and
+// reads its own consent record to refresh the local UI hint.
 import {
   CONSENT_VERSION,
-  consentRequestExpiry,
   writeLocalConsentHint,
   type ConsentRecord,
 } from '@/lib/consent';
+import {
+  callRecordSelfConsent,
+  callRequestParentalConsent,
+  callWithdrawConsent,
+  readOwnConsentDoc,
+} from '@/lib/firebase';
 
-async function db() {
-  const [{ getApps, initializeApp }, fs] = await Promise.all([
-    import('firebase/app'),
-    import('firebase/firestore'),
-  ]);
-  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-  return { fs, db: fs.getFirestore(app, firebaseConfig.firestoreDatabaseId) };
-}
-
-/** Creates consentRequests/{uid}; a Cloud Function emails the parent. */
+/** Asks the backend to email the parent a single-use consent link. */
 export async function requestParentalConsent(params: {
   uid: string;
   parentEmail: string;
 }): Promise<void> {
-  const now = Date.now();
-  const { fs, db: d } = await db();
-  await fs.setDoc(fs.doc(d, 'consentRequests', params.uid), {
-    uid: params.uid,
-    parentEmail: params.parentEmail.trim().toLowerCase(),
-    version: CONSENT_VERSION,
-    createdAt: fs.serverTimestamp(),
-    expiresAt: fs.Timestamp.fromMillis(consentRequestExpiry(now)),
-  });
+  await callRequestParentalConsent(params.parentEmail.trim().toLowerCase());
   writeLocalConsentHint({
     uid: params.uid,
     status: 'pending-parental-consent',
@@ -39,14 +27,24 @@ export async function requestParentalConsent(params: {
   });
 }
 
+/** Adult sign-up: records self-consent server-side (needed to post scores). */
+export async function recordSelfConsent(uid: string): Promise<void> {
+  await callRecordSelfConsent();
+  writeLocalConsentHint({ uid, status: 'granted', version: CONSENT_VERSION });
+}
+
+/** Withdraws consent server-side (also erases the user's scores and rounds). */
+export async function withdrawConsent(uid: string): Promise<void> {
+  await callWithdrawConsent();
+  writeLocalConsentHint({ uid, status: 'withdrawn', version: CONSENT_VERSION });
+}
+
 /** Reads consents/{uid} and refreshes the local UI hint. */
 export async function refreshConsentStatus(
   uid: string
 ): Promise<ConsentRecord | null> {
-  const { fs, db: d } = await db();
-  const snap = await fs.getDoc(fs.doc(d, 'consents', uid));
-  if (!snap.exists()) return null;
-  const data = snap.data() as ConsentRecord;
+  const data = (await readOwnConsentDoc(uid)) as ConsentRecord | null;
+  if (!data) return null;
   writeLocalConsentHint({ uid, status: data.status, version: data.version });
   return data;
 }

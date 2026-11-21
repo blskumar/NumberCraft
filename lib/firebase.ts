@@ -6,6 +6,7 @@ import type { FirebaseApp } from 'firebase/app';
 import type { Auth, User } from 'firebase/auth';
 import type { Firestore, Unsubscribe } from 'firebase/firestore';
 import firebaseConfig from '@/firebase-applet-config.json';
+import { FUNCTIONS_REGION } from '@/lib/backend-config';
 import { clampDailyProblemGoal, DAILY_PROBLEM_GOAL } from '@/lib/daily-goal';
 import {
   buildSanitizedScorePayload,
@@ -414,12 +415,37 @@ export async function upsertUserProfileDoc(params: {
 }
 
 // Callable functions are in Mumbai (see functions/src/index.ts).
-const FUNCTIONS_REGION = 'asia-south1';
+// FUNCTIONS_REGION lives in lib/backend-config.ts (shared with the CSP middleware).
+
+/**
+ * Kill switch for cloud score posting (workstream G flag). Default: the
+ * server-validated callable path is ON. Build with
+ * NEXT_PUBLIC_CLIENT_SCORE_WRITES=off to stop the client posting scores at all.
+ * (The legacy direct client write path no longer exists: rules deny it.)
+ */
+const CLOUD_SCORES_ENABLED = process.env.NEXT_PUBLIC_CLIENT_SCORE_WRITES !== 'off';
 
 async function callFunction<T>(name: string, data: unknown): Promise<T> {
   const [app, fn] = await Promise.all([getFirebaseApp(), import('firebase/functions')]);
   const res = await fn.httpsCallable(fn.getFunctions(app, FUNCTIONS_REGION), name)(data);
   return res.data as T;
+}
+
+// ---- Consent callables (backend: functions/src/consent.ts) -----------------
+export async function callRequestParentalConsent(parentEmail: string): Promise<void> {
+  await callFunction('requestParentalConsent', { parentEmail });
+}
+export async function callRecordSelfConsent(): Promise<void> {
+  await callFunction('recordSelfConsent', {});
+}
+export async function callWithdrawConsent(): Promise<void> {
+  await callFunction('withdrawConsent', {});
+}
+/** Reads the signed-in user's own consents/{uid} (rules: owner read only). */
+export async function readOwnConsentDoc(uid: string): Promise<Record<string, unknown> | null> {
+  const [fs, db] = await Promise.all([import('firebase/firestore'), getFirebaseDb()]);
+  const snap = await fs.getDoc(fs.doc(db, 'consents', uid));
+  return snap.exists() ? (snap.data() as Record<string, unknown>) : null;
 }
 
 /** One open round token per game, created by startRound (server-timed). */
@@ -432,6 +458,7 @@ const openRounds = new Map<PlayableGameId, string>();
  * score will not be posted. Guests must not call this.
  */
 export async function beginCloudRound(gameId: PlayableGameId, tier: AgeTier): Promise<void> {
+  if (!CLOUD_SCORES_ENABLED) return;
   try {
     const auth = await getFirebaseAuth();
     if (!auth.currentUser) return;
@@ -471,6 +498,9 @@ export async function saveCloudGameScore(params: {
   });
   const roundId = openRounds.get(sanitized.gameId);
   openRounds.delete(sanitized.gameId);
+  if (!CLOUD_SCORES_ENABLED) {
+    throw new AppAuthError('app/scores-disabled', 'Online scores are switched off.');
+  }
   try {
     const auth = await getFirebaseAuth();
     if (!auth.currentUser || auth.currentUser.uid !== sanitized.uid) {

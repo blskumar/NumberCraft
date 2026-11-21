@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import firebaseConfig from './firebase-applet-config.json';
+import { FUNCTIONS_REGION } from './lib/backend-config';
 
 const isDev = process.env.NODE_ENV !== 'production';
 const reportUri = process.env.CSP_REPORT_URI; // placeholder: set to a collector URL to enable
@@ -22,8 +23,7 @@ function buildCsp(nonce: string): string {
       'https://securetoken.googleapis.com',
       'https://firestore.googleapis.com',
       'https://firebaseappcheck.googleapis.com',
-      'https://*.cloudfunctions.net',
-      'https://*.run.app',
+      `https://${FUNCTIONS_REGION}-${firebaseConfig.projectId}.cloudfunctions.net`,
       'https://www.google.com/recaptcha/',
       'https://www.recaptcha.net/recaptcha/',
       ...(isDev ? ['ws://localhost:*', 'http://localhost:*'] : []),

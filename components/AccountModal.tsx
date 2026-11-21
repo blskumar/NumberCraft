@@ -54,9 +54,12 @@ import {
   type LocalConsentHint,
 } from '@/lib/consent';
 import {
+  recordSelfConsent,
   refreshConsentStatus,
   requestParentalConsent,
+  withdrawConsent,
 } from '@/lib/consent-client';
+import { DEFAULT_PROFILE } from '@/lib/storage';
 import { playSoundPreviewChime } from '@/lib/sound';
 import type {
   AchievementId,
@@ -154,6 +157,7 @@ function AccountModalBody({
   );
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
 
   useEffect(() => {
@@ -268,6 +272,10 @@ function AccountModalBody({
       setNameInput(resolvedName.slice(0, 28));
       setPasswordInput('');
       setSection('profile');
+      // Best effort: align the local consent hint with the server record.
+      void refreshConsentStatus(user.uid)
+        .then(() => setConsentHint(readLocalConsentHint()))
+        .catch(() => {});
       setStatusMessage(
         'Signed in! Unlimited levels unlocked and your per-game scores will save to the Daily & Weekly Top 10 Leaderboards.'
       );
@@ -357,7 +365,13 @@ function AccountModalBody({
         setEmailVerified(false);
         return;
       }
-      writeLocalConsentHint(null);
+      try {
+        await recordSelfConsent(user.uid);
+      } catch {
+        // Retry-able: without a server consent record scores are simply not posted.
+        writeLocalConsentHint(null);
+      }
+      setConsentHint(readLocalConsentHint());
       setStatusMessage(
         'Free account created! Check your email and click the verification link: your scores appear on the Top 10 leaderboards once your email is verified.'
       );
@@ -403,6 +417,8 @@ function AccountModalBody({
     setIsSubmitting(true);
     try {
       await signOutAccount();
+      writeLocalConsentHint(null); // consent hint belongs to the signed-in user only
+      setConsentHint(null);
       if (wipeSharedOnSignOut) {
         onClearLocalProgress();
       }
@@ -415,6 +431,14 @@ function AccountModalBody({
         email: null,
         sharedDeviceMode: false,
         featuredBadgeId: wipeSharedOnSignOut ? null : profile.featuredBadgeId,
+        // The wipe resets personal prefs; do not write the stale prop values back.
+        ...(wipeSharedOnSignOut
+          ? {
+              ageTier: DEFAULT_PROFILE.ageTier,
+              dailyProblemGoal: DEFAULT_PROFILE.dailyProblemGoal,
+              soundEnabled: DEFAULT_PROFILE.soundEnabled,
+            }
+          : {}),
       });
       setNameInput('Guest Explorer');
       setConfirmSignOut(false);
@@ -441,6 +465,24 @@ function AccountModalBody({
     }
   }
 
+  async function handleWithdrawConsent() {
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setIsSubmitting(true);
+    try {
+      await withdrawConsent(profile.uid ?? '');
+      setConsentHint(readLocalConsentHint());
+      setConfirmWithdraw(false);
+      setStatusMessage(
+        'Consent withdrawn. Your online scores were removed and new scores stay on this device.'
+      );
+    } catch (err) {
+      setErrorMessage(formatFirebaseAuthError(err));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleDeleteAccount(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
@@ -448,6 +490,8 @@ function AccountModalBody({
     setIsSubmitting(true);
     try {
       await deleteAccount(deletePassword);
+      writeLocalConsentHint(null);
+      setConsentHint(null);
       onClearLocalProgress();
       onUpdateProfile({
         ...profile,
@@ -1175,6 +1219,43 @@ function AccountModalBody({
                   </a>
                   .
                 </p>
+
+                {!confirmWithdraw ? (
+                  <button
+                    type="button"
+                    data-testid="withdraw-consent-btn"
+                    onClick={() => setConfirmWithdraw(true)}
+                    className="block text-[11px] font-semibold text-[#1D4ED8] underline"
+                  >
+                    Withdraw consent (keep my account)
+                  </button>
+                ) : (
+                  <div className="space-y-2 rounded-lg border border-[#D8D1C4] bg-[#FFFDF2] p-3">
+                    <p className="text-xs leading-relaxed text-[#1C232B]">
+                      This removes your scores from the online leaderboard and
+                      stops new online scores. Your account and local progress
+                      stay.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        data-testid="confirm-withdraw-consent-btn"
+                        onClick={handleWithdrawConsent}
+                        className="rounded-lg bg-[#1D4ED8] px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        Withdraw consent
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmWithdraw(false)}
+                        className="rounded-lg border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-semibold text-[#5A6572]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {!confirmDelete ? (
                   <button
