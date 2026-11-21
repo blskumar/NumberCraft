@@ -156,8 +156,12 @@ describe('Daily Goal Progress Ring & Streak Counter (lib/daily-goal.ts)', () => 
         result: 'win',
         primesClaimed: 0,
         playedAt: todayIso,
+        solvedProblems: 5,
       },
     ];
+
+    assert.equal(clampDailyProblemGoal(Infinity), MAX_DAILY_PROBLEM_GOAL);
+    assert.equal(clampDailyProblemGoal(-Infinity), MIN_DAILY_PROBLEM_GOAL);
 
     const breakdownRealOnly = getTodayProblemBreakdown(
       matches,

@@ -66,20 +66,24 @@ const GUEST_TRIALS_STORAGE_KEY = 'numbercraft_guest_trials_v1';
 
 export type GuestTrialUsageMap = Partial<Record<PlayableGameId, number>>;
 
+const TITLE_TO_GAME_ID = new Map<string, PlayableGameId>();
+for (const id of PLAYABLE_GAME_IDS) {
+  const { title, shortTitle } = PLAYABLE_GAME_CATALOG[id];
+  TITLE_TO_GAME_ID.set(title.toLowerCase(), id);
+  TITLE_TO_GAME_ID.set(shortTitle.toLowerCase(), id);
+}
+
 /**
- * Resolves a MatchRecord back to its canonical PlayableGameId.
+ * Resolves a MatchRecord back to its PlayableGameId, or null when it cannot be identified
+ * (never guesses: an unknown title must not consume another game's trial).
  */
-export function resolveGameIdFromMatch(match: MatchRecord): PlayableGameId {
+export function resolveGameIdFromMatch(match: MatchRecord): PlayableGameId | null {
   if (match.dailyMeta) return 'daily-challenge';
-  if (match.arithmeticMeta) return match.arithmeticMeta.gameId;
-  const lower = match.gameTitle.toLowerCase();
-  if (lower.includes('equation foundry')) return 'equation-foundry';
-  if (lower.includes('odds')) return 'odds-urns';
-  if (lower.includes('addition')) return 'addition-attack';
-  if (lower.includes('subtraction')) return 'subtraction-sprint';
-  if (lower.includes('multiplication')) return 'multiplication-mastery';
-  if (lower.includes('daily')) return 'daily-challenge';
-  return 'factor-grid';
+  if (match.arithmeticMeta && PLAYABLE_GAME_IDS.includes(match.arithmeticMeta.gameId)) {
+    return match.arithmeticMeta.gameId;
+  }
+  if (typeof match.gameTitle !== 'string') return null;
+  return TITLE_TO_GAME_ID.get(match.gameTitle.trim().toLowerCase()) ?? null;
 }
 
 export function loadGuestTrialUsage(): GuestTrialUsageMap {
@@ -149,14 +153,15 @@ export function computeEffectiveGuestTrials(
   };
 
   for (const m of matches) {
-    if (m.id.startsWith('sample-')) continue;
+    if (!m || typeof m.id !== 'string' || m.id.startsWith('sample-')) continue;
+    if (m.signedIn) continue; // signed-in rounds are credited to the cloud, not the guest trial
     const gameId = resolveGameIdFromMatch(m);
-    matchCounts[gameId] += 1;
+    if (gameId) matchCounts[gameId] += 1;
   }
 
   let realDailyCount = 0;
   for (const dc of dailyCompletions) {
-    if (dc.completedAt.endsWith('.111Z')) continue;
+    if (dc.isSample || typeof dc.completedAt !== 'string' || Number.isNaN(Date.parse(dc.completedAt))) continue;
     realDailyCount += 1;
   }
   matchCounts['daily-challenge'] = Math.max(

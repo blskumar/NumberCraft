@@ -434,6 +434,8 @@ export function buildOddsUrnsMatchRecord(params: {
   chamber: ProbabilityChamber;
   playerScore: number;
   opponentScore: number;
+  /** Rounds the player actually solved; credited to the daily goal. */
+  solvedRounds?: number;
 }): MatchRecord {
   const result: 'win' | 'loss' | 'draw' =
     params.playerScore > params.opponentScore
@@ -461,5 +463,9 @@ export function buildOddsUrnsMatchRecord(params: {
     result,
     primesClaimed: 0,
     playedAt: new Date().toISOString(),
+    solvedProblems:
+      typeof params.solvedRounds === 'number' && Number.isFinite(params.solvedRounds)
+        ? Math.max(0, Math.floor(params.solvedRounds))
+        : undefined,
   };
 }

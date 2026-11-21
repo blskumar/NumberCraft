@@ -123,6 +123,8 @@ export interface DailyChallengeCompletion {
   streakDays?: number;
   streakBonus?: number;
   completedAt: string;
+  /** Explicit marker for generated demo data (never inferred from timestamps). */
+  isSample?: boolean;
 }
 
 export interface DailyMatchMeta {
@@ -152,6 +154,10 @@ export interface MatchRecord {
   arithmeticMeta?: ArithmeticMatchMeta;
   dailyMeta?: DailyMatchMeta;
   dailyMilestoneMultiplier?: number;
+  /** Set when recorded while signed in (those rounds do not use up the guest trial). */
+  signedIn?: boolean;
+  /** Real problems solved (Equation Foundry / Odds & Urns); drives goal credit. */
+  solvedProblems?: number;
 }
 
 export type AchievementId =

@@ -594,5 +594,6 @@ export function buildFoundryMatchRecord(params: {
     result,
     primesClaimed: 0,
     playedAt: new Date().toISOString(),
+    solvedProblems: Number.isFinite(params.exactHits) ? Math.max(0, Math.floor(params.exactHits)) : 0,
   };
 }

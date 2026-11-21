@@ -371,11 +371,8 @@ export function evaluateAchievements(
       competitiveWins += 1;
       if (!firstWinMatch) firstWinMatch = m;
 
-      const streakCredit =
-        m.dailyMilestoneMultiplier && m.dailyMilestoneMultiplier > 1
-          ? m.dailyMilestoneMultiplier
-          : 1;
-      currentStreak = Number((currentStreak + streakCredit).toFixed(2));
+      // The milestone multiplier boosts points/primes only; a win is always one win.
+      currentStreak += 1;
       if (currentStreak > bestStreak) {
         bestStreak = currentStreak;
       }

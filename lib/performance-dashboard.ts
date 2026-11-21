@@ -1043,7 +1043,7 @@ export function computeDashboardOverview(
 }
 
 export function isSampleDailyCompletion(c: DailyChallengeCompletion): boolean {
-  return c.completedAt.endsWith('.111Z');
+  return c.isSample === true;
 }
 
 export function createSampleDashboardData(
@@ -1302,7 +1302,8 @@ export function createSampleDashboardData(
       score: d.score,
       streakDays: d.streakDays,
       streakBonus: d.streakBonus > 0 ? d.streakBonus : undefined,
-      completedAt: `${dk}T15:00:00.111Z`,
+      completedAt: `${dk}T15:00:00.000Z`,
+      isSample: true,
     };
   });
 
