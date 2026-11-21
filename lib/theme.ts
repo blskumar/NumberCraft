@@ -39,6 +39,17 @@ export function loadThemePreference(): ThemePreference {
   return 'system';
 }
 
+/** The explicitly stored theme key, or null when absent/invalid (no 'system' fallback). */
+export function readStoredThemePreference(): ThemePreference | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return isValidThemePreference(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 export function saveThemePreference(preference: ThemePreference): void {
   if (typeof window === 'undefined') return;
   try {

@@ -89,6 +89,7 @@ import { getStudioTabA11yMeta } from '@/lib/studio-a11y';
 import {
   applyThemeToDocument,
   loadThemePreference,
+  readStoredThemePreference,
   saveThemePreference,
 } from '@/lib/theme';
 import type {
@@ -310,8 +311,8 @@ export default function NumbercraftApp() {
       const loadedBadges = loadEarnedBadges();
       const loadedDaily = loadDailyCompletions();
       const loadedGuestTrials = loadGuestTrialUsage();
-      const loadedTheme =
-        loadedProfile.themePreference ?? loadThemePreference();
+      // Single source of truth: the theme key wins over the profile mirror.
+      const loadedTheme = readStoredThemePreference() ?? loadedProfile.themePreference ?? loadThemePreference();
       applyThemeToDocument(loadedTheme);
       setThemePreference(loadedTheme);
 
@@ -353,6 +354,8 @@ export default function NumbercraftApp() {
 
   // Validate Firestore connectivity once on boot + keep Firebase Email Auth in sync
   useEffect(() => {
+    // Wait for hydration so the auth callback never overwrites the stored profile.
+    if (!hydrated) return;
     void testFirestoreConnection();
 
     const unsubscribe = subscribeToAuthState(async (firebaseUser) => {
@@ -406,7 +409,7 @@ export default function NumbercraftApp() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [hydrated]);
 
   const achievementEvaluation = useMemo(
     () => evaluateAchievements(matches, earnedBadges, dailyCompletions),
@@ -466,7 +469,10 @@ export default function NumbercraftApp() {
         return;
       }
 
-      if (isActiveGameTab(activeTab)) {
+      const idleVisit =
+        sessionAccumulatorRef.current.problemsAttempted === 0 &&
+        sessionAccumulatorRef.current.matchesRecorded === 0;
+      if (isActiveGameTab(activeTab) && !idleVisit) {
         const acc = sessionAccumulatorRef.current;
         const summary = buildEndOfSessionSummary({
           arenaTab: activeTab,

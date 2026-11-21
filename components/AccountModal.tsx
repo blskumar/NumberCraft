@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useModalFocus } from '@/components/useModalFocus';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowRight,
@@ -137,15 +138,7 @@ function AccountModalBody({
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [wipeSharedOnSignOut, setWipeSharedOnSignOut] = useState(false);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  const dialogRef = useModalFocus<HTMLDivElement>(true, onClose);
 
   const earnedSet = new Set(
     achievementEvaluation.earnedRecords.map((record) => record.id)
@@ -368,6 +361,7 @@ function AccountModalBody({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="account-modal-title"
