@@ -14,6 +14,7 @@ import OnlineRoomsPreview from '@/components/OnlineRoomsPreview';
 import MasteryNotebook from '@/components/MasteryNotebook';
 import PerformanceDashboard from '@/components/PerformanceDashboard';
 import GameRulesGuide from '@/components/GameRulesGuide';
+import { hintAllowsCloudScores, readLocalConsentHint } from '@/lib/consent';
 import AccountModal, {
   type AccountAuthMode,
   type AccountModalSection,
@@ -691,7 +692,13 @@ export default function NumbercraftApp() {
         currentProfile.sessionKind === 'authenticated' &&
         Boolean(currentProfile.uid);
 
-      if (signedIn && currentProfile.uid) {
+      // Minors without granted parental consent never write cloud scores
+      // (docs/legal/04); server rules must enforce the same (owner action).
+      if (
+        signedIn &&
+        currentProfile.uid &&
+        hintAllowsCloudScores(readLocalConsentHint(), currentProfile.uid)
+      ) {
         void saveCloudGameScore({
           uid: currentProfile.uid,
           displayName: currentProfile.displayName,

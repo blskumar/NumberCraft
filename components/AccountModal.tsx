@@ -42,6 +42,20 @@ import {
   upsertUserProfileDoc,
 } from '@/lib/firebase';
 import { MODERATION_MESSAGES, validateDisplayName } from '@/lib/name-moderation';
+import ConsentGate, {
+  EMPTY_CONSENT_GATE,
+  consentGateError,
+  type ConsentGateValue,
+} from '@/components/ConsentGate';
+import {
+  readLocalConsentHint,
+  writeLocalConsentHint,
+  type LocalConsentHint,
+} from '@/lib/consent';
+import {
+  refreshConsentStatus,
+  requestParentalConsent,
+} from '@/lib/consent-client';
 import { playSoundPreviewChime } from '@/lib/sound';
 import type {
   AchievementId,
@@ -132,7 +146,11 @@ function AccountModalBody({
   // Child-safe default: session-only sign-in unless 'remember me' is ticked.
   const [rememberMe, setRememberMe] = useState(false);
   const sharedDevice = !rememberMe;
-  const [guardianConsent, setGuardianConsent] = useState(false);
+  const [consentGate, setConsentGate] =
+    useState<ConsentGateValue>(EMPTY_CONSENT_GATE);
+  const [consentHint, setConsentHint] = useState<LocalConsentHint | null>(
+    () => readLocalConsentHint()
+  );
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -296,10 +314,9 @@ function AccountModalBody({
       );
       return;
     }
-    if (!guardianConsent) {
-      setErrorMessage(
-        'Please confirm that a parent or guardian agrees before creating an account.'
-      );
+    const gateError = consentGateError(consentGate, cleanedEmail);
+    if (gateError) {
+      setErrorMessage(gateError);
       return;
     }
 
@@ -326,6 +343,28 @@ function AccountModalBody({
       setNameInput(cleanedName.slice(0, 28));
       setPasswordInput('');
       setSection('profile');
+      if (consentGate.ageBand === 'minor') {
+        try {
+          await requestParentalConsent({
+            uid: user.uid,
+            parentEmail: consentGate.parentEmail,
+          });
+        } catch {
+          writeLocalConsentHint({
+            uid: user.uid,
+            status: 'pending-parental-consent',
+            version: 'unsent',
+          });
+        }
+        setConsentHint(readLocalConsentHint());
+        setConsentGate(EMPTY_CONSENT_GATE);
+        setStatusMessage(
+          'Account created. We asked your parent or guardian to say yes. Until they do, your scores stay on this device and are not shown on the leaderboard.'
+        );
+        setEmailVerified(false);
+        return;
+      }
+      writeLocalConsentHint(null);
       setStatusMessage(
         'Free account created! Check your email and click the verification link: your scores appear on the Top 10 leaderboards once your email is verified.'
       );
@@ -1106,6 +1145,43 @@ function AccountModalBody({
                   </div>
                 )}
 
+                {consentHint && consentHint.status !== 'granted' && (
+                  <div
+                    role="status"
+                    data-testid="consent-pending-banner"
+                    className="rounded-xl border border-[#D8D1C4] bg-[#FFFDF2] p-3 text-xs text-[#1C232B]"
+                  >
+                    Waiting for your parent or guardian to say yes. Until
+                    then your scores are not saved online or shown on the
+                    leaderboard.
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await refreshConsentStatus(profile.uid ?? '');
+                        } catch {
+                          // offline or not yet granted
+                        }
+                        setConsentHint(readLocalConsentHint());
+                      }}
+                      className="mt-2 block rounded-lg border border-[#D8D1C4] bg-white px-3 py-1.5 font-semibold text-[#1D4ED8]"
+                    >
+                      Check again
+                    </button>
+                  </div>
+                )}
+                <p className="text-[11px] leading-relaxed text-[#5A6572]">
+                  Parents and adults can withdraw consent or ask for data
+                  deletion at any time: delete the account below, or see{' '}
+                  <a
+                    href="/grievance"
+                    className="font-semibold text-[#1D4ED8] underline"
+                  >
+                    how to contact us
+                  </a>
+                  .
+                </p>
+
                 {!confirmDelete ? (
                   <button
                     type="button"
@@ -1452,20 +1528,7 @@ function AccountModalBody({
                       computers)
                     </label>
 
-                    <label className="flex cursor-pointer items-start gap-2 text-xs text-[#1C232B]">
-                      <input
-                        type="checkbox"
-                        required
-                        data-testid="guardian-consent"
-                        checked={guardianConsent}
-                        onChange={(e) => setGuardianConsent(e.target.checked)}
-                        className="mt-0.5 h-3.5 w-3.5 rounded accent-[#1D4ED8]"
-                      />
-                      <span>
-                        A parent or guardian agrees that I can create this
-                        account (or I am an adult).
-                      </span>
-                    </label>
+                    <ConsentGate value={consentGate} onChange={setConsentGate} />
                     <p className="text-[11px] leading-relaxed text-[#5A6572]">
                       <strong>Privacy:</strong> we store your email, display
                       name, age tier and game scores. Your display name, age
