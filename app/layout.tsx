@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { Fraunces, Plus_Jakarta_Sans, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 
@@ -43,11 +44,13 @@ export const metadata: Metadata = {
 
 const THEME_INIT_SCRIPT = `(function(){try{var p=localStorage.getItem('numbercraft_theme_v1');if(p!=='light'&&p!=='dark'&&p!=='system'){p='system';}var dark=p==='dark'||(p==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var eff=dark?'dark':'light';var r=document.documentElement;r.dataset.theme=eff;r.dataset.themePreference=p;r.classList.toggle('dark',dark);r.style.colorScheme=eff;}catch(e){}})();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Reading headers() opts the tree into dynamic rendering so Next can nonce its scripts.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
     <html
       lang="en"
@@ -55,7 +58,7 @@ export default function RootLayout({
       className={`${fraunces.variable} ${plusJakartaSans.variable} ${ibmPlexMono.variable}`}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body
         suppressHydrationWarning
