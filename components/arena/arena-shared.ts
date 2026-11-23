@@ -23,7 +23,6 @@ export interface TurnLogEntry {
   tone: 'safe' | 'hazard' | 'bank' | 'bot';
 }
 
-/** Props every arena takes: tier picker, player name, sound toggle and navigation. */
 export interface ArenaBaseProps {
   ageTier: AgeTier;
   onChangeTier: (tier: AgeTier) => void;
@@ -34,7 +33,6 @@ export interface ArenaBaseProps {
   onOpenNotebook: () => void;
 }
 
-/** Props shared by the two AI-opponent arenas (Equation Foundry, Odds & Urns). */
 export interface AiArenaProps extends ArenaBaseProps {
   onRecordMatch: (record: MatchRecord) => AchievementDefinition[];
   guestTrialLocked?: boolean;

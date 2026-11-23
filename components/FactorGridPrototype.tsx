@@ -1,6 +1,5 @@
 'use client';
 
-
 import FactorGridSetup from './arena/FactorGridSetup';
 import FactorGridToolbar from './arena/FactorGridToolbar';
 import FactorGridBoardZone from './arena/FactorGridBoardZone';

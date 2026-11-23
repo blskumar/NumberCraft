@@ -340,13 +340,13 @@ export function useDailyChallengeArena(props: DailyChallengeArenaProps) {
   const tierSpec = TIER_SPECS[displayTier];
 
   return {
-    activeCompletion, ageTier, copiedSummary, countdownText, currentStep,
+    ...props,
+    activeCompletion, copiedSummary, countdownText, currentStep,
     dailyBadgeStatuses, feedback, handleBackspace, handleCopyShareSummary,
     handleDigitAppend, handleRevealHint, handleSubmitStep, hintsUsed,
-    inputValue, mistakes, newlyUnlockedBadges, onBackToStudio, onChangeTier,
-    onOpenNotebook, onToggleSound, phase, playerName, practiceReplay, puzzle,
-    secondsLeft, setInputValue, showHint, solvedValues, soundEnabled,
-    startDailyRun, stepIdx, streakRewards, streakStats, tierSpec, todayKey,
+    inputValue, mistakes, newlyUnlockedBadges, phase, practiceReplay, puzzle,
+    secondsLeft, setInputValue, showHint, solvedValues, startDailyRun, stepIdx,
+    streakRewards, streakStats, tierSpec, todayKey,
   };
 }
 

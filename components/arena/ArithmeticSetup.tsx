@@ -1,7 +1,7 @@
-import { PACE_ORDER, TIER_ORDER } from './arena-shared';
+import TierPicker from './TierPicker';
+import { PACE_ORDER } from './arena-shared';
 import { ADAPTIVE_BANDS, type AdaptiveLevel } from '@/lib/adaptive-arithmetic';
 import { ARITHMETIC_PACES, CORRECT_ANSWERS_PER_STAGE, TABLE_FOCUS_OPTIONS, type MultiplicationTableFocus } from '@/lib/arithmetic-engine';
-import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { Play, SlidersHorizontal, Volume2, VolumeX } from 'lucide-react';
 import type { ArithmeticCtx } from './useArithmeticArena';
 
@@ -35,35 +35,15 @@ export default function ArithmeticSetup({ r }: { r: ArithmeticCtx }) {
               <label className="block text-xs font-semibold text-[#1C232B]">
                 1. Difficulty Level (Age Tier)
               </label>
-              <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                {TIER_ORDER.map((t) => {
-                  const spec = TIER_SPECS[t];
-                  const selected = ageTier === t;
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => onChangeTier(t)}
-                      className={`rounded-xl border p-3 text-left transition-all ${
-                        selected
-                          ? 'border-[#1D4ED8] bg-[#EFF5FF] shadow-[0_2px_0_#C7DAFC]'
-                          : 'border-[#E0D9CA] bg-[#FAF8F4] hover:border-[#1D4ED8]/50'
-                      }`}
-                    >
-                      <p className="text-xs font-semibold text-[#1C232B]">
-                        {spec.label}
-                      </p>
-                      <p className="font-mono text-[11px] text-[#5A6572]">
-                        {spec.ageRange}
-                      </p>
-                      <p className="mt-1.5 text-[11px] leading-snug text-[#46515E]">
-                        {activeSpec.tierSummaries[t]}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
+              <TierPicker
+                ageTier={ageTier}
+                onChangeTier={onChangeTier}
+                detail={(t) => (
+                  <p className="mt-1.5 text-[11px] leading-snug text-[#46515E]">
+                    {activeSpec.tierSummaries[t]}
+                  </p>
+                )}
+              />
             </div>
 
             {/* Timer / Pace Controls */}

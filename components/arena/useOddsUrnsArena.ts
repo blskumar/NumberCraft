@@ -382,14 +382,14 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
   ]);
 
   return {
-    activeTierSpec, ageTier, aiDifficulty, botScore, calibrationHits, chamber,
+    ...props,
+    activeTierSpec, aiDifficulty, botScore, calibrationHits, chamber,
     chamberSpec, currentPot, drawnMarbles, estimateFeedback, estimateSlider,
     handleLockEstimate, handlePlayerBank, handlePlayerPress, lastDice,
-    lastOutcome, mode, odds, onBackToStudio, onChangeTier, onOpenNotebook,
-    onToggleSound, phase, playerName, playerScore, prefersReducedMotion,
+    lastOutcome, mode, odds, phase, playerScore, prefersReducedMotion,
     roundNumber, setAiDifficulty, setChamber, setEstimateSlider, setMode,
-    setPhase, setShowEvCoach, showEvCoach, soundEnabled, spinnerRotation,
-    spinnerWheel, startSession, turnLog, turnOwner, unlockedBadges, urnMarbles,
+    setPhase, setShowEvCoach, showEvCoach, spinnerRotation, spinnerWheel,
+    startSession, turnLog, turnOwner, unlockedBadges, urnMarbles,
   };
 }
 

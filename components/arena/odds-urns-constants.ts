@@ -1,6 +1,5 @@
 import { type MarbleKind } from '@/lib/odds-urns-engine';
 
-
 export const MARBLE_GRADIENTS: Record<MarbleKind, string> = {
   cobalt: 'radial-gradient(circle at 32% 28%, #60A5FA, #1D4ED8 60%, #1E3A8A)',
   emerald: 'radial-gradient(circle at 32% 28%, #34D399, #047857 60%, #064E3B)',

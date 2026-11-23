@@ -381,16 +381,15 @@ export function useArithmeticArena(props: ArithmeticArenaProps) {
   );
 
   return {
-    accuracyPercent, activeSpec, adaptiveDifficulty, adaptiveState, ageTier,
+    ...props,
+    accuracyPercent, activeSpec, adaptiveDifficulty, adaptiveState,
     allowSignedStrategistSub, attempted, autoSubmit, bestStreak, calibration,
     elapsedSeconds, feedback, finalizeRound, gameId, handleBackspace,
-    handleDigitAppend, history, inputValue, isGameLockedForGuest,
-    maxStageReached, missedEntries, multiplicationStages, onBackToStudio,
-    onChangeTier, onOpenNotebook, onRequireRegistration, onToggleSound, pace,
-    pacePerMinute, parTarget, phase, playerName, problem, score, secondsLeft,
-    setAdaptiveDifficulty, setAllowSignedStrategistSub, setAutoSubmit,
-    setGameId, setInputValue, setPace, setPhase, setShowHint, setStartStage,
-    setTableFocus, setUntimed, showHint, solved, soundEnabled, startRound,
+    handleDigitAppend, history, inputValue, maxStageReached, missedEntries,
+    multiplicationStages, pace, pacePerMinute, parTarget, phase, problem, score,
+    secondsLeft, setAdaptiveDifficulty, setAllowSignedStrategistSub,
+    setAutoSubmit, setGameId, setInputValue, setPace, setPhase, setShowHint,
+    setStartStage, setTableFocus, setUntimed, showHint, solved, startRound,
     startStage, streak, submitAnswer, tableFocus, tierSpec, untimed,
   };
 }

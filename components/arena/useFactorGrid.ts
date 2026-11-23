@@ -261,16 +261,15 @@ export function useFactorGrid(props: FactorGridPrototypeProps) {
     totalScored > 0 ? Math.round((game.scores.p1 / totalScored) * 100) : 50;
   const scoreDiff = game.scores.p1 - game.scores.p2;
   return {
-    activeActorName, activePreview, ageTier, aiDifficulty, aiThinking,
-    biggestSwing, freshTilesSet, game, gridColsClass, guestTrialLocked,
-    handleRequestHint, handleTileClick, highlightedDivisors, hintNote, hintTile,
-    hoveredTile, inspectedNumber, legalMovesSet, mode, newlyUnlockedSeals,
-    onBackToStudio, onChangeTier, onOpenNotebook, onOpenRooms,
-    onRequireRegistration, onToggleSound, p1Input, p1SharePercent, p2Input,
-    remainingLegalCount, scoreDiff, setAiDifficulty, setCustomP1Name,
-    setHintNote, setHintTile, setHoveredTile, setMode, setP2Input, setStage,
-    setVariant, setupSpec, soundEnabled, spec, stage, startNewMatch, tilesArray,
-    variant,
+    ...props,
+    activeActorName, activePreview, aiDifficulty, aiThinking, biggestSwing,
+    freshTilesSet, game, gridColsClass, guestTrialLocked, handleRequestHint,
+    handleTileClick, highlightedDivisors, hintNote, hintTile, hoveredTile,
+    inspectedNumber, legalMovesSet, mode, newlyUnlockedSeals, p1Input,
+    p1SharePercent, p2Input, remainingLegalCount, scoreDiff, setAiDifficulty,
+    setCustomP1Name, setHintNote, setHintTile, setHoveredTile, setMode,
+    setP2Input, setStage, setVariant, setupSpec, spec, stage, startNewMatch,
+    tilesArray, variant,
   };
 }
 

@@ -279,15 +279,14 @@ export function useEquationFoundryArena(props: EquationFoundryArenaProps) {
   const exactHitsCount = history.filter((h) => h.exact).length;
 
   return {
-    activeTierSpec, ageTier, aiDifficulty, aiTotal, currentDelta, evaluation,
+    ...props,
+    activeTierSpec, aiDifficulty, aiTotal, currentDelta, evaluation,
     exactHitsCount, exactMatchNow, handleBackspace, handleClearBench,
     handleNextRound, handleRemoveTokenAt, handleSelectOperator,
-    handleSelectTile, handleSubmitRound, hintRevealed, history, mode,
-    onBackToStudio, onChangeTier, onOpenNotebook, onToggleSound, phase,
-    playerName, playerTotal, prefersReducedMotion, puzzle, roundNumber,
-    roundRevealed, setAiDifficulty, setHintRevealed, setMode, setPhase,
-    setStepsRevealed, soundEnabled, startSession, stepsRevealed, tokens,
-    unlockedBadges, usedTileSet,
+    handleSelectTile, handleSubmitRound, hintRevealed, history, mode, phase,
+    playerTotal, prefersReducedMotion, puzzle, roundNumber, roundRevealed,
+    setAiDifficulty, setHintRevealed, setMode, setPhase, setStepsRevealed,
+    startSession, stepsRevealed, tokens, unlockedBadges, usedTileSet,
   };
 }
 
