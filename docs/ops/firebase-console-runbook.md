@@ -138,7 +138,7 @@ Budgets alert; they do not cap spend. **Verify:** `gcloud billing budgets list -
 
 **Firestore region note:** a database location is immutable. Confirm it is `asia-south1`:
 `gcloud firestore databases describe --database=$DB_ID --format="value(locationId)"`.
-Functions that touch Firestore must run in the same region (`setGlobalOptions({region:'asia-south1'})`), and `connect-src` already allows `https://*.cloudfunctions.net` and `https://*.run.app`.
+Functions that touch Firestore must run in the same region (`asia-south1`, see `lib/backend-config.ts`), and `connect-src` allows only `https://asia-south1-<project>.cloudfunctions.net`.
 
 **PITR and scheduled backups:**
 ```bash

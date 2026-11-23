@@ -7,7 +7,7 @@
 | script-src | `'self' 'nonce-N' 'strict-dynamic'` + recaptcha hosts | strict-dynamic lets nonced code load chunks and the lazily injected reCAPTCHA script; hosts are only a fallback for old browsers. No `'unsafe-inline'` (dev adds `'unsafe-eval'` for React refresh). |
 | style-src | `'self' 'nonce-N'` | `<style>` elements need the nonce. Dev adds `'unsafe-inline'` for HMR only. |
 | style-src-attr | `'unsafe-inline'` | **Unavoidable**: `motion` and Tailwind arbitrary values emit `style="..."` attributes, which cannot carry a nonce. This only permits style attributes, not `<style>` blocks or scripts. |
-| connect-src | self, identitytoolkit, securetoken, firestore, firebaseappcheck, `*.cloudfunctions.net`, `*.run.app`, recaptcha | what the lazy SDK needs. Tighten the functions entry to the exact `https://<region>-<project>.cloudfunctions.net` once workstream E fixes the region (CSP allows a wildcard only as the whole leftmost label, so use the full host). |
+| connect-src | self, identitytoolkit, securetoken, firestore, firebaseappcheck, `https://asia-south1-<project>.cloudfunctions.net` (exact host built from `lib/backend-config.ts` + `firebase-applet-config.json`), recaptcha | what the lazy SDK needs. No wildcard hosts. |
 | frame-src | auth domain, recaptcha | auth handler iframe, reCAPTCHA challenge |
 | object-src / base-uri / form-action / frame-ancestors | `none` / `self` / `self` / `none` | |
 | other | `upgrade-insecure-requests`; `report-uri` only if env `CSP_REPORT_URI` is set (placeholder) | |

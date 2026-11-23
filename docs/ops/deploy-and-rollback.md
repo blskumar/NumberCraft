@@ -14,7 +14,7 @@ The project id comes from `firebase-applet-config.json`. Dry-run never contacts 
 1. **Functions first.** The server-side score/moderation endpoints must exist before anything requires them.
 2. **Rules and indexes second.** Once rules deny direct client writes to `gameScores`, any client still writing directly breaks. Deploying rules before functions means no valid write path exists.
 3. **Client last.** New client calls the function path. During the gap between steps 2 and 3, the *old* client's score saves fail (rules deny) but nothing else breaks (guests are unaffected: they never touch Firebase).
-4. **Feature flag to bridge:** build the client with `NEXT_PUBLIC_CLIENT_SCORE_WRITES=off` (name reserved here; the client in `lib/firebase.ts` `saveCloudGameScore`, owned by workstream E, must read it) to keep the legacy direct-write score path disabled once rules are strict. Set `on` only for a pre-rules staging build. Never ship `on` after step 2.
+4. **Score kill switch:** `lib/firebase.ts` reads `NEXT_PUBLIC_CLIENT_SCORE_WRITES` at build time. Default (unset or any value but `off`) = scores post through the `startRound`/`submitScore` callables. `off` stops the client posting scores at all (rollback if the functions misbehave). The legacy direct client write path no longer exists; rules deny it.
 5. Enforce App Check (runbook 1.4) only after the new client has been live for days.
 
 Indexes: the leaderboard queries are single-field equality or a single-field range on `dateKey` plus `limit`, and `uid ==` on its own. These use automatic single-field indexes, so `firestore.indexes.json` is empty. Add composite entries only if a query gains `orderBy` on a second field.
