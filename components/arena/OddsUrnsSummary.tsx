@@ -1,20 +1,11 @@
-import { TOTAL_ROUNDS } from './odds-urns-constants';
+import { TOTAL_ROUNDS } from './arena-shared';
 import { BookOpen, RotateCcw, Trophy } from 'lucide-react';
 import type { OddsUrnsCtx } from './useOddsUrnsArena';
 
 export default function OddsUrnsSummary({ r }: { r: OddsUrnsCtx }) {
   const {
-    ageTier,
-    botScore,
-    calibrationHits,
-    chamberSpec,
-    mode,
-    onOpenNotebook,
-    playerName,
-    playerScore,
-    setPhase,
-    startSession,
-    unlockedBadges,
+    ageTier, botScore, calibrationHits, chamberSpec, mode, onOpenNotebook,
+    playerName, playerScore, setPhase, startSession, unlockedBadges,
   } = r;
   return (
         <section

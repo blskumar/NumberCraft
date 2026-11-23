@@ -1,38 +1,24 @@
 import { useKeypadKeyboard } from './useKeypadKeyboard';
-import { DAILY_BADGE_IDS, DailyPhase } from './daily-constants';
+import { ArenaBaseProps, DAILY_BADGE_IDS, DailyPhase } from './arena-shared';
 import { type AchievementDefinition, type AchievementEvaluation } from '@/lib/achievements';
 import { buildDailyShareSummary, calculateDailyScore, computeDailyStreakStats, formatCountdownClock, generateDailyPuzzle, getLocalDateKey, getSecondsUntilNextDaily, getStreakBonusPoints, getStreakRewardSummary } from '@/lib/daily-challenge';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { playTileClaimSound, playVictoryChord } from '@/lib/sound';
-import { type AgeTier, type DailyChallengeCompletion } from '@/lib/types';
+import { type DailyChallengeCompletion } from '@/lib/types';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export interface DailyChallengeArenaProps {
-  ageTier: AgeTier;
-  onChangeTier: (tier: AgeTier) => void;
-  playerName: string;
-  soundEnabled: boolean;
-  onToggleSound: () => void;
+export interface DailyChallengeArenaProps extends ArenaBaseProps {
   dailyCompletions: DailyChallengeCompletion[];
   achievementEvaluation: AchievementEvaluation;
   onCompleteDaily: (
     completion: DailyChallengeCompletion
   ) => AchievementDefinition[];
-  onBackToStudio: () => void;
-  onOpenNotebook: () => void;
 }
 
 export function useDailyChallengeArena(props: DailyChallengeArenaProps) {
   const {
-    ageTier,
-    onChangeTier,
-    playerName,
-    soundEnabled,
-    onToggleSound,
-    dailyCompletions,
-    achievementEvaluation,
-    onCompleteDaily,
-    onBackToStudio,
+    ageTier, onChangeTier, playerName, soundEnabled, onToggleSound,
+    dailyCompletions, achievementEvaluation, onCompleteDaily, onBackToStudio,
     onOpenNotebook,
   } = props;
   const todayKey = useMemo(() => getLocalDateKey(), []);
@@ -69,16 +55,12 @@ export function useDailyChallengeArena(props: DailyChallengeArenaProps) {
   const [inputValue, setInputValue] = useState('');
   const [showHint, setShowHint] = useState(false);
   const [hintUsedOnStep, setHintUsedOnStep] = useState<boolean[]>([
-    false,
-    false,
-    false,
+    false, false, false,
   ]);
   const [mistakes, setMistakes] = useState(0);
   const [hintsUsed, setHintsUsed] = useState(0);
   const [solvedValues, setSolvedValues] = useState<(number | null)[]>([
-    null,
-    null,
-    null,
+    null, null, null,
   ]);
   const [feedback, setFeedback] = useState<{
     kind: 'correct' | 'wrong';
@@ -188,10 +170,7 @@ export function useDailyChallengeArena(props: DailyChallengeArenaProps) {
       setPhase('completed');
     },
     [
-      onCompleteDaily,
-      practiceReplay,
-      puzzle,
-      soundEnabled,
+      onCompleteDaily, practiceReplay, puzzle, soundEnabled,
       streakStats.currentStreak,
       streakStats.solvedToday,
     ]
@@ -312,13 +291,8 @@ export function useDailyChallengeArena(props: DailyChallengeArenaProps) {
       }
     },
     [
-      currentStep,
-      finalizeDailyAttempt,
-      mistakes,
-      phase,
-      solvedValues,
-      soundEnabled,
-      stepIdx,
+      currentStep, finalizeDailyAttempt, mistakes, phase, solvedValues,
+      soundEnabled, stepIdx,
     ]
   );
 
@@ -366,41 +340,13 @@ export function useDailyChallengeArena(props: DailyChallengeArenaProps) {
   const tierSpec = TIER_SPECS[displayTier];
 
   return {
-    activeCompletion,
-    ageTier,
-    copiedSummary,
-    countdownText,
-    currentStep,
-    dailyBadgeStatuses,
-    feedback,
-    handleBackspace,
-    handleCopyShareSummary,
-    handleDigitAppend,
-    handleRevealHint,
-    handleSubmitStep,
-    hintsUsed,
-    inputValue,
-    mistakes,
-    newlyUnlockedBadges,
-    onBackToStudio,
-    onChangeTier,
-    onOpenNotebook,
-    onToggleSound,
-    phase,
-    playerName,
-    practiceReplay,
-    puzzle,
-    secondsLeft,
-    setInputValue,
-    showHint,
-    solvedValues,
-    soundEnabled,
-    startDailyRun,
-    stepIdx,
-    streakRewards,
-    streakStats,
-    tierSpec,
-    todayKey,
+    activeCompletion, ageTier, copiedSummary, countdownText, currentStep,
+    dailyBadgeStatuses, feedback, handleBackspace, handleCopyShareSummary,
+    handleDigitAppend, handleRevealHint, handleSubmitStep, hintsUsed,
+    inputValue, mistakes, newlyUnlockedBadges, onBackToStudio, onChangeTier,
+    onOpenNotebook, onToggleSound, phase, playerName, practiceReplay, puzzle,
+    secondsLeft, setInputValue, showHint, solvedValues, soundEnabled,
+    startDailyRun, stepIdx, streakRewards, streakStats, tierSpec, todayKey,
   };
 }
 

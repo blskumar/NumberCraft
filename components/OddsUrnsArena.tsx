@@ -9,11 +9,7 @@ import { useOddsUrnsArena, type OddsUrnsArenaProps } from './arena/useOddsUrnsAr
 export default function OddsUrnsArena(props: OddsUrnsArenaProps) {
   const r = useOddsUrnsArena(props);
   const {
-    activeTierSpec,
-    onBackToStudio,
-    onToggleSound,
-    phase,
-    soundEnabled,
+    activeTierSpec, onBackToStudio, onToggleSound, phase, soundEnabled,
   } = r;
   return (
     <main

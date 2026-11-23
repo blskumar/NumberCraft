@@ -9,11 +9,7 @@ import { useEquationFoundryArena, type EquationFoundryArenaProps } from './arena
 export default function EquationFoundryArena(props: EquationFoundryArenaProps) {
   const r = useEquationFoundryArena(props);
   const {
-    activeTierSpec,
-    onBackToStudio,
-    onToggleSound,
-    phase,
-    soundEnabled,
+    activeTierSpec, onBackToStudio, onToggleSound, phase, soundEnabled,
   } = r;
   return (
     <main

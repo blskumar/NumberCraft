@@ -4,14 +4,8 @@ import type { FactorGridCtx } from './useFactorGrid';
 
 export default function FactorGridToolbar({ r }: { r: FactorGridCtx }) {
   const {
-    aiThinking,
-    game,
-    handleRequestHint,
-    onToggleSound,
-    setStage,
-    soundEnabled,
-    spec,
-    startNewMatch,
+    aiThinking, game, handleRequestHint, onToggleSound, setStage, soundEnabled,
+    spec, startNewMatch,
   } = r;
   return (
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E2DCCF] pb-4">

@@ -5,24 +5,10 @@ import type { ArithmeticCtx } from './useArithmeticArena';
 
 export default function ArithmeticSummary({ r }: { r: ArithmeticCtx }) {
   const {
-    accuracyPercent,
-    activeSpec,
-    adaptiveDifficulty,
-    adaptiveState,
-    attempted,
-    bestStreak,
-    gameId,
-    isGameLockedForGuest,
-    maxStageReached,
-    missedEntries,
-    onOpenNotebook,
-    onRequireRegistration,
-    parTarget,
-    score,
-    setPhase,
-    solved,
-    startRound,
-    tierSpec,
+    accuracyPercent, activeSpec, adaptiveDifficulty, adaptiveState, attempted,
+    bestStreak, gameId, isGameLockedForGuest, maxStageReached, missedEntries,
+    onOpenNotebook, onRequireRegistration, parTarget, score, setPhase, solved,
+    startRound, tierSpec,
   } = r;
   return (
         <section

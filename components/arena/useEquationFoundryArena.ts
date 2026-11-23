@@ -1,35 +1,18 @@
-import { TOTAL_ROUNDS } from './foundry-constants';
+import { AiArenaProps, TOTAL_ROUNDS } from './arena-shared';
 import { type AchievementDefinition } from '@/lib/achievements';
 import { buildFoundryMatchRecord, computeAiFoundryScore, evaluateFoundryTokens, formatFoundryTokens, generateFoundryPuzzle, scoreFoundrySubmission, type FoundryOperator, type FoundryPuzzle, type FoundryRoundOutcome, type FoundryTile, type FoundryToken } from '@/lib/equation-foundry-engine';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { playArithmeticFeedbackSound, playTileClaimSound, playVictoryChord } from '@/lib/sound';
-import { type AgeTier, type AiDifficulty, type MatchRecord, type PlayMode } from '@/lib/types';
+import { type AgeTier, type AiDifficulty, type PlayMode } from '@/lib/types';
 import { useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-export interface EquationFoundryArenaProps {
-  ageTier: AgeTier;
-  onChangeTier: (tier: AgeTier) => void;
-  playerName: string;
-  soundEnabled: boolean;
-  onToggleSound: () => void;
-  onBackToStudio: () => void;
-  onOpenNotebook: () => void;
-  onRecordMatch: (record: MatchRecord) => AchievementDefinition[];
-  guestTrialLocked?: boolean;
-  onRequireRegistration?: () => void;
-}
+export type EquationFoundryArenaProps = AiArenaProps;
 
 export function useEquationFoundryArena(props: EquationFoundryArenaProps) {
   const {
-    ageTier,
-    onChangeTier,
-    playerName,
-    soundEnabled,
-    onToggleSound,
-    onBackToStudio,
-    onOpenNotebook,
-    onRecordMatch,
+    ageTier, onChangeTier, playerName, soundEnabled, onToggleSound,
+    onBackToStudio, onOpenNotebook, onRecordMatch,
     guestTrialLocked = false,
     onRequireRegistration,
   } = props;
@@ -97,10 +80,7 @@ export function useEquationFoundryArena(props: EquationFoundryArenaProps) {
       playTileClaimSound(soundEnabled, true);
     },
     [
-      ageTier,
-      guestTrialLocked,
-      onRequireRegistration,
-      sessionSeed,
+      ageTier, guestTrialLocked, onRequireRegistration, sessionSeed,
       soundEnabled,
     ]
   );
@@ -229,15 +209,8 @@ export function useEquationFoundryArena(props: EquationFoundryArenaProps) {
       playArithmeticFeedbackSound(soundEnabled, 'wrong');
     }
   }, [
-    aiDifficulty,
-    evaluation,
-    hintRevealed,
-    mode,
-    puzzle,
-    roundNumber,
-    roundRevealed,
-    soundEnabled,
-    tokens,
+    aiDifficulty, evaluation, hintRevealed, mode, puzzle, roundNumber,
+    roundRevealed, soundEnabled, tokens,
   ]);
 
   const handleNextRound = useCallback(() => {
@@ -271,17 +244,8 @@ export function useEquationFoundryArena(props: EquationFoundryArenaProps) {
     setRoundRevealed(null);
     playTileClaimSound(soundEnabled, false);
   }, [
-    ageTier,
-    aiDifficulty,
-    aiTotal,
-    history,
-    mode,
-    onRecordMatch,
-    playerTotal,
-    roundNumber,
-    roundRevealed,
-    sessionSeed,
-    soundEnabled,
+    ageTier, aiDifficulty, aiTotal, history, mode, onRecordMatch, playerTotal,
+    roundNumber, roundRevealed, sessionSeed, soundEnabled,
   ]);
 
   // Keyboard shortcuts during active play
@@ -309,56 +273,21 @@ export function useEquationFoundryArena(props: EquationFoundryArenaProps) {
   }, [
     evaluation.valid,
     evaluation.value,
-    handleBackspace,
-    handleNextRound,
-    handleSubmitRound,
-    phase,
-    roundRevealed,
+    handleBackspace, handleNextRound, handleSubmitRound, phase, roundRevealed,
   ]);
 
   const exactHitsCount = history.filter((h) => h.exact).length;
 
   return {
-    activeTierSpec,
-    ageTier,
-    aiDifficulty,
-    aiTotal,
-    currentDelta,
-    evaluation,
-    exactHitsCount,
-    exactMatchNow,
-    handleBackspace,
-    handleClearBench,
-    handleNextRound,
-    handleRemoveTokenAt,
-    handleSelectOperator,
-    handleSelectTile,
-    handleSubmitRound,
-    hintRevealed,
-    history,
-    mode,
-    onBackToStudio,
-    onChangeTier,
-    onOpenNotebook,
-    onToggleSound,
-    phase,
-    playerName,
-    playerTotal,
-    prefersReducedMotion,
-    puzzle,
-    roundNumber,
-    roundRevealed,
-    setAiDifficulty,
-    setHintRevealed,
-    setMode,
-    setPhase,
-    setStepsRevealed,
-    soundEnabled,
-    startSession,
-    stepsRevealed,
-    tokens,
-    unlockedBadges,
-    usedTileSet,
+    activeTierSpec, ageTier, aiDifficulty, aiTotal, currentDelta, evaluation,
+    exactHitsCount, exactMatchNow, handleBackspace, handleClearBench,
+    handleNextRound, handleRemoveTokenAt, handleSelectOperator,
+    handleSelectTile, handleSubmitRound, hintRevealed, history, mode,
+    onBackToStudio, onChangeTier, onOpenNotebook, onToggleSound, phase,
+    playerName, playerTotal, prefersReducedMotion, puzzle, roundNumber,
+    roundRevealed, setAiDifficulty, setHintRevealed, setMode, setPhase,
+    setStepsRevealed, soundEnabled, startSession, stepsRevealed, tokens,
+    unlockedBadges, usedTileSet,
   };
 }
 

@@ -1,19 +1,12 @@
-import { StageView } from './factor-grid-constants';
+import { ArenaBaseProps, StageView } from './arena-shared';
 import { type AchievementDefinition } from '@/lib/achievements';
 import { TIER_SPECS, applyMove, chooseAiMove, classifyNumber, createFactorGame, getBestHintMove, getLegalMoves, isLegalMove, previewMove } from '@/lib/factor-grid-engine';
 import { playAchievementChime, playFactorGridMoveSound, playTileClaimSound, playVictoryChord } from '@/lib/sound';
 import { type AgeTier, type AiDifficulty, type FactorGameState, type FactorVariant, type MatchRecord, type PlayMode } from '@/lib/types';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export interface FactorGridPrototypeProps {
-  ageTier: AgeTier;
-  onChangeTier: (tier: AgeTier) => void;
-  playerName: string;
-  soundEnabled: boolean;
-  onToggleSound: () => void;
-  onBackToStudio: () => void;
+export interface FactorGridPrototypeProps extends ArenaBaseProps {
   onOpenRooms: () => void;
-  onOpenNotebook: () => void;
   onRecordMatch: (record: MatchRecord) => AchievementDefinition[];
   autoStart?: boolean;
   guestTrialLocked?: boolean;
@@ -22,15 +15,8 @@ export interface FactorGridPrototypeProps {
 
 export function useFactorGrid(props: FactorGridPrototypeProps) {
   const {
-    ageTier,
-    onChangeTier,
-    playerName,
-    soundEnabled,
-    onToggleSound,
-    onBackToStudio,
-    onOpenRooms,
-    onOpenNotebook,
-    onRecordMatch,
+    ageTier, onChangeTier, playerName, soundEnabled, onToggleSound,
+    onBackToStudio, onOpenRooms, onOpenNotebook, onRecordMatch,
     autoStart = false,
     guestTrialLocked = false,
     onRequireRegistration,
@@ -183,9 +169,7 @@ export function useFactorGrid(props: FactorGridPrototypeProps) {
     setGame(
       createFactorGame({
         tier: targetTier,
-        mode,
-        aiDifficulty,
-        variant,
+        mode, aiDifficulty, variant,
         player1Name: p1Input.trim() || 'You',
         player2Name: p2Input.trim() || 'Player 2',
       })
@@ -277,52 +261,15 @@ export function useFactorGrid(props: FactorGridPrototypeProps) {
     totalScored > 0 ? Math.round((game.scores.p1 / totalScored) * 100) : 50;
   const scoreDiff = game.scores.p1 - game.scores.p2;
   return {
-    activeActorName,
-    activePreview,
-    ageTier,
-    aiDifficulty,
-    aiThinking,
-    biggestSwing,
-    freshTilesSet,
-    game,
-    gridColsClass,
-    guestTrialLocked,
-    handleRequestHint,
-    handleTileClick,
-    highlightedDivisors,
-    hintNote,
-    hintTile,
-    hoveredTile,
-    inspectedNumber,
-    legalMovesSet,
-    mode,
-    newlyUnlockedSeals,
-    onBackToStudio,
-    onChangeTier,
-    onOpenNotebook,
-    onOpenRooms,
-    onRequireRegistration,
-    onToggleSound,
-    p1Input,
-    p1SharePercent,
-    p2Input,
-    remainingLegalCount,
-    scoreDiff,
-    setAiDifficulty,
-    setCustomP1Name,
-    setHintNote,
-    setHintTile,
-    setHoveredTile,
-    setMode,
-    setP2Input,
-    setStage,
-    setVariant,
-    setupSpec,
-    soundEnabled,
-    spec,
-    stage,
-    startNewMatch,
-    tilesArray,
+    activeActorName, activePreview, ageTier, aiDifficulty, aiThinking,
+    biggestSwing, freshTilesSet, game, gridColsClass, guestTrialLocked,
+    handleRequestHint, handleTileClick, highlightedDivisors, hintNote, hintTile,
+    hoveredTile, inspectedNumber, legalMovesSet, mode, newlyUnlockedSeals,
+    onBackToStudio, onChangeTier, onOpenNotebook, onOpenRooms,
+    onRequireRegistration, onToggleSound, p1Input, p1SharePercent, p2Input,
+    remainingLegalCount, scoreDiff, setAiDifficulty, setCustomP1Name,
+    setHintNote, setHintTile, setHoveredTile, setMode, setP2Input, setStage,
+    setVariant, setupSpec, soundEnabled, spec, stage, startNewMatch, tilesArray,
     variant,
   };
 }

@@ -4,19 +4,9 @@ import type { DailyCtx } from './useDailyChallengeArena';
 
 export default function DailyCompleted({ r }: { r: DailyCtx }) {
   const {
-    activeCompletion,
-    copiedSummary,
-    countdownText,
-    handleCopyShareSummary,
-    newlyUnlockedBadges,
-    onBackToStudio,
-    onOpenNotebook,
-    practiceReplay,
-    puzzle,
-    startDailyRun,
-    streakRewards,
-    streakStats,
-    tierSpec,
+    activeCompletion, copiedSummary, countdownText, handleCopyShareSummary,
+    newlyUnlockedBadges, onBackToStudio, onOpenNotebook, practiceReplay, puzzle,
+    startDailyRun, streakRewards, streakStats, tierSpec,
   } = r;
   if (!activeCompletion) return null;
   return (

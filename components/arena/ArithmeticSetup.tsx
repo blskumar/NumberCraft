@@ -1,4 +1,4 @@
-import { PACE_ORDER, TIER_ORDER } from './arithmetic-constants';
+import { PACE_ORDER, TIER_ORDER } from './arena-shared';
 import { ADAPTIVE_BANDS, type AdaptiveLevel } from '@/lib/adaptive-arithmetic';
 import { ARITHMETIC_PACES, CORRECT_ANSWERS_PER_STAGE, TABLE_FOCUS_OPTIONS, type MultiplicationTableFocus } from '@/lib/arithmetic-engine';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
@@ -7,32 +7,12 @@ import type { ArithmeticCtx } from './useArithmeticArena';
 
 export default function ArithmeticSetup({ r }: { r: ArithmeticCtx }) {
   const {
-    activeSpec,
-    adaptiveDifficulty,
-    ageTier,
-    allowSignedStrategistSub,
-    autoSubmit,
-    calibration,
-    gameId,
-    multiplicationStages,
-    onChangeTier,
-    onToggleSound,
-    pace,
-    parTarget,
-    playerName,
-    setAdaptiveDifficulty,
-    setAllowSignedStrategistSub,
-    setAutoSubmit,
-    setPace,
-    setStartStage,
-    setTableFocus,
-    setUntimed,
-    soundEnabled,
-    startRound,
-    startStage,
-    tableFocus,
-    tierSpec,
-    untimed,
+    activeSpec, adaptiveDifficulty, ageTier, allowSignedStrategistSub,
+    autoSubmit, calibration, gameId, multiplicationStages, onChangeTier,
+    onToggleSound, pace, parTarget, playerName, setAdaptiveDifficulty,
+    setAllowSignedStrategistSub, setAutoSubmit, setPace, setStartStage,
+    setTableFocus, setUntimed, soundEnabled, startRound, startStage, tableFocus,
+    tierSpec, untimed,
   } = r;
   return (
         <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">

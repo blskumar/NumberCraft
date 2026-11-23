@@ -4,25 +4,10 @@ import type { DailyCtx } from './useDailyChallengeArena';
 
 export default function DailyPlay({ r }: { r: DailyCtx }) {
   const {
-    currentStep,
-    feedback,
-    handleBackspace,
-    handleDigitAppend,
-    handleRevealHint,
-    handleSubmitStep,
-    hintsUsed,
-    inputValue,
-    mistakes,
-    onToggleSound,
-    practiceReplay,
-    puzzle,
-    secondsLeft,
-    setInputValue,
-    showHint,
-    solvedValues,
-    soundEnabled,
-    stepIdx,
-    streakRewards,
+    currentStep, feedback, handleBackspace, handleDigitAppend, handleRevealHint,
+    handleSubmitStep, hintsUsed, inputValue, mistakes, onToggleSound,
+    practiceReplay, puzzle, secondsLeft, setInputValue, showHint, solvedValues,
+    soundEnabled, stepIdx, streakRewards,
   } = r;
   return (
         <section className="mt-6 space-y-5">

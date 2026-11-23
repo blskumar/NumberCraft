@@ -5,22 +5,9 @@ import type { FactorGridCtx } from './useFactorGrid';
 
 export default function FactorGridSetup({ r }: { r: FactorGridCtx }) {
   const {
-    ageTier,
-    aiDifficulty,
-    mode,
-    onBackToStudio,
-    onChangeTier,
-    onOpenRooms,
-    p1Input,
-    p2Input,
-    setAiDifficulty,
-    setCustomP1Name,
-    setMode,
-    setP2Input,
-    setVariant,
-    setupSpec,
-    startNewMatch,
-    variant,
+    ageTier, aiDifficulty, mode, onBackToStudio, onChangeTier, onOpenRooms,
+    p1Input, p2Input, setAiDifficulty, setCustomP1Name, setMode, setP2Input,
+    setVariant, setupSpec, startNewMatch, variant,
   } = r;
   return (
       <main className="mx-auto max-w-[1040px] px-4 py-8 sm:px-6 lg:px-8">

@@ -35,9 +35,7 @@ export function MapleDie({ value, hazard }: { value: number; hazard: boolean }) 
 }
 
 export function ConditionalSpinnerSvg({
-  wheel,
-  rotationDeg,
-  reducedMotion,
+  wheel, rotationDeg, reducedMotion,
 }: {
   wheel: SpinnerWheelState;
   rotationDeg: number;

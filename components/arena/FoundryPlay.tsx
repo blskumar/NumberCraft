@@ -1,37 +1,16 @@
-import { TOTAL_ROUNDS } from './foundry-constants';
+import { TOTAL_ROUNDS } from './arena-shared';
 import { ArrowRight, Check, Cpu, Delete, Lightbulb, Sparkles, Target, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { FoundryCtx } from './useEquationFoundryArena';
 
 export default function FoundryPlay({ r }: { r: FoundryCtx }) {
   const {
-    activeTierSpec,
-    aiDifficulty,
-    aiTotal,
-    currentDelta,
-    evaluation,
-    exactHitsCount,
-    exactMatchNow,
-    handleBackspace,
-    handleClearBench,
-    handleNextRound,
-    handleRemoveTokenAt,
-    handleSelectOperator,
-    handleSelectTile,
-    handleSubmitRound,
-    hintRevealed,
-    history,
-    mode,
-    playerName,
-    playerTotal,
-    prefersReducedMotion,
-    puzzle,
-    roundNumber,
-    roundRevealed,
-    setHintRevealed,
-    setStepsRevealed,
-    stepsRevealed,
-    tokens,
+    activeTierSpec, aiDifficulty, aiTotal, currentDelta, evaluation,
+    exactHitsCount, exactMatchNow, handleBackspace, handleClearBench,
+    handleNextRound, handleRemoveTokenAt, handleSelectOperator,
+    handleSelectTile, handleSubmitRound, hintRevealed, history, mode,
+    playerName, playerTotal, prefersReducedMotion, puzzle, roundNumber,
+    roundRevealed, setHintRevealed, setStepsRevealed, stepsRevealed, tokens,
     usedTileSet,
   } = r;
   return (

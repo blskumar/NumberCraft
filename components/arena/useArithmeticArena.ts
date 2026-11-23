@@ -1,21 +1,14 @@
 import { useKeypadKeyboard } from './useKeypadKeyboard';
-import { ArenaPhase } from './arithmetic-constants';
+import { ArenaBaseProps, ArenaPhase } from './arena-shared';
 import { computeHistoricalCalibration, createAdaptiveSession, stepAdaptiveSession, type AdaptiveSessionState } from '@/lib/adaptive-arithmetic';
 import { ARITHMETIC_GAMES, ARITHMETIC_PACES, MULTIPLICATION_STAGES_BY_TIER, buildArithmeticMatchRecord, calculateAnswerPoints, generateArithmeticProblem, getParTargetScore, type ArithmeticAnswerEntry, type ArithmeticProblem, type ArithmeticRoundConfig, type MultiplicationTableFocus } from '@/lib/arithmetic-engine';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { getArithmeticSoundCue, playArithmeticFeedbackSound, playVictoryChord } from '@/lib/sound';
-import { type AgeTier, type ArithmeticGameId, type ArithmeticPace, type MatchRecord } from '@/lib/types';
+import { type ArithmeticGameId, type ArithmeticPace, type MatchRecord } from '@/lib/types';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export interface ArithmeticArenaProps {
+export interface ArithmeticArenaProps extends ArenaBaseProps {
   initialGameId: ArithmeticGameId;
-  ageTier: AgeTier;
-  onChangeTier: (tier: AgeTier) => void;
-  playerName: string;
-  soundEnabled: boolean;
-  onToggleSound: () => void;
-  onBackToStudio: () => void;
-  onOpenNotebook: () => void;
   onRecordMatch: (record: MatchRecord) => void;
   matches: MatchRecord[];
   isGameLockedForGuest?: (gameId: ArithmeticGameId) => boolean;
@@ -24,18 +17,9 @@ export interface ArithmeticArenaProps {
 
 export function useArithmeticArena(props: ArithmeticArenaProps) {
   const {
-    initialGameId,
-    ageTier,
-    onChangeTier,
-    playerName,
-    soundEnabled,
-    onToggleSound,
-    onBackToStudio,
-    onOpenNotebook,
-    onRecordMatch,
-    matches,
-    isGameLockedForGuest,
-    onRequireRegistration,
+    initialGameId, ageTier, onChangeTier, playerName, soundEnabled,
+    onToggleSound, onBackToStudio, onOpenNotebook, onRecordMatch, matches,
+    isGameLockedForGuest, onRequireRegistration,
   } = props;
   const [gameId, setGameId] = useState<ArithmeticGameId>(initialGameId);
   const [pace, setPace] = useState<ArithmeticPace>('standard');
@@ -102,10 +86,7 @@ export function useArithmeticArena(props: ArithmeticArenaProps) {
     () => ({
       gameId,
       tier: ageTier,
-      pace,
-      untimed,
-      startStage,
-      tableFocus,
+      pace, untimed, startStage, tableFocus,
       allowSignedStrategistSub:
         gameId === 'subtraction-sprint' &&
         ageTier === 'strategists' &&
@@ -114,14 +95,8 @@ export function useArithmeticArena(props: ArithmeticArenaProps) {
       adaptiveLevel: adaptiveDifficulty ? adaptiveState.level : undefined,
     }),
     [
-      gameId,
-      ageTier,
-      pace,
-      untimed,
-      startStage,
-      tableFocus,
-      allowSignedStrategistSub,
-      adaptiveDifficulty,
+      gameId, ageTier, pace, untimed, startStage, tableFocus,
+      allowSignedStrategistSub, adaptiveDifficulty,
       adaptiveState.level,
     ]
   );
@@ -222,14 +197,8 @@ export function useArithmeticArena(props: ArithmeticArenaProps) {
       setPhase('playing');
     },
     [
-      gameId,
-      matches,
-      ageTier,
-      roundConfig,
-      adaptiveDifficulty,
-      pace,
-      isGameLockedForGuest,
-      onRequireRegistration,
+      gameId, matches, ageTier, roundConfig, adaptiveDifficulty, pace,
+      isGameLockedForGuest, onRequireRegistration,
     ]
   );
 
@@ -360,17 +329,8 @@ export function useArithmeticArena(props: ArithmeticArenaProps) {
       setShowHint(autoOpenHint);
     },
     [
-      phase,
-      problem,
-      attempted,
-      solved,
-      streak,
-      bestStreak,
-      score,
-      adaptiveDifficulty,
-      adaptiveState,
-      roundConfig,
-      maxStageReached,
+      phase, problem, attempted, solved, streak, bestStreak, score,
+      adaptiveDifficulty, adaptiveState, roundConfig, maxStageReached,
       soundEnabled,
     ]
   );
@@ -421,62 +381,17 @@ export function useArithmeticArena(props: ArithmeticArenaProps) {
   );
 
   return {
-    accuracyPercent,
-    activeSpec,
-    adaptiveDifficulty,
-    adaptiveState,
-    ageTier,
-    allowSignedStrategistSub,
-    attempted,
-    autoSubmit,
-    bestStreak,
-    calibration,
-    elapsedSeconds,
-    feedback,
-    finalizeRound,
-    gameId,
-    handleBackspace,
-    handleDigitAppend,
-    history,
-    inputValue,
-    isGameLockedForGuest,
-    maxStageReached,
-    missedEntries,
-    multiplicationStages,
-    onBackToStudio,
-    onChangeTier,
-    onOpenNotebook,
-    onRequireRegistration,
-    onToggleSound,
-    pace,
-    pacePerMinute,
-    parTarget,
-    phase,
-    playerName,
-    problem,
-    score,
-    secondsLeft,
-    setAdaptiveDifficulty,
-    setAllowSignedStrategistSub,
-    setAutoSubmit,
-    setGameId,
-    setInputValue,
-    setPace,
-    setPhase,
-    setShowHint,
-    setStartStage,
-    setTableFocus,
-    setUntimed,
-    showHint,
-    solved,
-    soundEnabled,
-    startRound,
-    startStage,
-    streak,
-    submitAnswer,
-    tableFocus,
-    tierSpec,
-    untimed,
+    accuracyPercent, activeSpec, adaptiveDifficulty, adaptiveState, ageTier,
+    allowSignedStrategistSub, attempted, autoSubmit, bestStreak, calibration,
+    elapsedSeconds, feedback, finalizeRound, gameId, handleBackspace,
+    handleDigitAppend, history, inputValue, isGameLockedForGuest,
+    maxStageReached, missedEntries, multiplicationStages, onBackToStudio,
+    onChangeTier, onOpenNotebook, onRequireRegistration, onToggleSound, pace,
+    pacePerMinute, parTarget, phase, playerName, problem, score, secondsLeft,
+    setAdaptiveDifficulty, setAllowSignedStrategistSub, setAutoSubmit,
+    setGameId, setInputValue, setPace, setPhase, setShowHint, setStartStage,
+    setTableFocus, setUntimed, showHint, solved, soundEnabled, startRound,
+    startStage, streak, submitAnswer, tableFocus, tierSpec, untimed,
   };
 }
 

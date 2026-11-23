@@ -1,18 +1,5 @@
-import { type MarbleKind, type ProbabilityChamber } from '@/lib/odds-urns-engine';
-import { type AgeTier, type AiDifficulty } from '@/lib/types';
+import { type MarbleKind } from '@/lib/odds-urns-engine';
 
-export const TOTAL_ROUNDS = 5;
-export const TIER_ORDER: AgeTier[] = ['explorers', 'challengers', 'strategists'];
-export const CHAMBER_ORDER: ProbabilityChamber[] = [
-  'marble-urn',
-  'twin-dice',
-  'conditional-spinner',
-];
-export const DIFFICULTIES: { id: AiDifficulty; label: string; desc: string }[] = [
-  { id: 'apprentice', label: 'Apprentice', desc: 'Banks conservatively early' },
-  { id: 'scholar', label: 'Scholar', desc: 'Balanced expected value play' },
-  { id: 'master', label: 'Master', desc: 'Exact optimal EV ≥ 0 cutoff' },
-];
 
 export const MARBLE_GRADIENTS: Record<MarbleKind, string> = {
   cobalt: 'radial-gradient(circle at 32% 28%, #60A5FA, #1D4ED8 60%, #1E3A8A)',

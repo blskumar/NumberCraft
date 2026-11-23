@@ -1,21 +1,26 @@
-import { CHAMBER_ORDER, DIFFICULTIES, TIER_ORDER } from './odds-urns-constants';
+import { TIER_ORDER } from './arena-shared';
+import type { ProbabilityChamber } from '@/lib/odds-urns-engine';
+import type { AiDifficulty } from '@/lib/types';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { CHAMBER_SPECS } from '@/lib/odds-urns-engine';
 import { ArrowRight, Bot, Compass, Dices, Sparkles, User } from 'lucide-react';
 import type { OddsUrnsCtx } from './useOddsUrnsArena';
 
+const CHAMBER_ORDER: ProbabilityChamber[] = [
+  'marble-urn',
+  'twin-dice',
+  'conditional-spinner',
+];
+const DIFFICULTIES: { id: AiDifficulty; label: string; desc: string }[] = [
+  { id: 'apprentice', label: 'Apprentice', desc: 'Banks conservatively early' },
+  { id: 'scholar', label: 'Scholar', desc: 'Balanced expected value play' },
+  { id: 'master', label: 'Master', desc: 'Exact optimal EV ≥ 0 cutoff' },
+];
+
 export default function OddsUrnsSetup({ r }: { r: OddsUrnsCtx }) {
   const {
-    ageTier,
-    aiDifficulty,
-    chamber,
-    chamberSpec,
-    mode,
-    onChangeTier,
-    setAiDifficulty,
-    setChamber,
-    setMode,
-    startSession,
+    ageTier, aiDifficulty, chamber, chamberSpec, mode, onChangeTier,
+    setAiDifficulty, setChamber, setMode, startSession,
   } = r;
   return (
         <section className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-12">

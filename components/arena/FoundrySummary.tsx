@@ -1,20 +1,11 @@
-import { TOTAL_ROUNDS } from './foundry-constants';
+import { TOTAL_ROUNDS } from './arena-shared';
 import { BookOpen, RotateCcw, Trophy } from 'lucide-react';
 import type { FoundryCtx } from './useEquationFoundryArena';
 
 export default function FoundrySummary({ r }: { r: FoundryCtx }) {
   const {
-    ageTier,
-    aiTotal,
-    exactHitsCount,
-    history,
-    mode,
-    onOpenNotebook,
-    playerName,
-    playerTotal,
-    setPhase,
-    startSession,
-    unlockedBadges,
+    ageTier, aiTotal, exactHitsCount, history, mode, onOpenNotebook, playerName,
+    playerTotal, setPhase, startSession, unlockedBadges,
   } = r;
   return (
         <section

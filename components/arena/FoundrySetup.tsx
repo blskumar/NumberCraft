@@ -1,17 +1,19 @@
-import { DIFFICULTIES, TIER_ORDER } from './foundry-constants';
+import { TIER_ORDER } from './arena-shared';
+import type { AiDifficulty } from '@/lib/types';
 import { FOUNDRY_OPERATORS_BY_TIER } from '@/lib/equation-foundry-engine';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { ArrowRight, Bot, Calculator, User } from 'lucide-react';
 import type { FoundryCtx } from './useEquationFoundryArena';
 
+const DIFFICULTIES: { id: AiDifficulty; label: string; desc: string }[] = [
+  { id: 'apprentice', label: 'Apprentice', desc: 'Aims within ±3 of target' },
+  { id: 'scholar', label: 'Scholar', desc: 'Solves most targets exactly' },
+  { id: 'master', label: 'Master', desc: 'Optimal solver every round' },
+];
+
 export default function FoundrySetup({ r }: { r: FoundryCtx }) {
   const {
-    ageTier,
-    aiDifficulty,
-    mode,
-    onChangeTier,
-    setAiDifficulty,
-    setMode,
+    ageTier, aiDifficulty, mode, onChangeTier, setAiDifficulty, setMode,
     startSession,
   } = r;
   return (

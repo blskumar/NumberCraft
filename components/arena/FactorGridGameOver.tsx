@@ -5,15 +5,8 @@ import type { FactorGridCtx } from './useFactorGrid';
 
 export default function FactorGridGameOver({ r }: { r: FactorGridCtx }) {
   const {
-    biggestSwing,
-    game,
-    guestTrialLocked,
-    newlyUnlockedSeals,
-    onBackToStudio,
-    onOpenNotebook,
-    onRequireRegistration,
-    setStage,
-    startNewMatch,
+    biggestSwing, game, guestTrialLocked, newlyUnlockedSeals, onBackToStudio,
+    onOpenNotebook, onRequireRegistration, setStage, startNewMatch,
   } = r;
   return (
         <div

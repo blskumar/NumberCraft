@@ -1,38 +1,18 @@
 import { ConditionalSpinnerSvg, MapleDie } from './OddsUrnsDice';
-import { DICE_SUM_WAYS, MARBLE_GRADIENTS, TOTAL_ROUNDS } from './odds-urns-constants';
+import { TOTAL_ROUNDS } from './arena-shared';
+import { DICE_SUM_WAYS, MARBLE_GRADIENTS } from './odds-urns-constants';
 import { AlertTriangle, Check, Dices, Eye, EyeOff, Landmark, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { OddsUrnsCtx } from './useOddsUrnsArena';
 
 export default function OddsUrnsPlay({ r }: { r: OddsUrnsCtx }) {
   const {
-    ageTier,
-    botScore,
-    chamber,
-    chamberSpec,
-    currentPot,
-    drawnMarbles,
-    estimateFeedback,
-    estimateSlider,
-    handleLockEstimate,
-    handlePlayerBank,
-    handlePlayerPress,
-    lastDice,
-    lastOutcome,
-    mode,
-    odds,
-    playerName,
-    playerScore,
-    prefersReducedMotion,
-    roundNumber,
-    setEstimateSlider,
-    setShowEvCoach,
-    showEvCoach,
-    spinnerRotation,
-    spinnerWheel,
-    turnLog,
-    turnOwner,
-    urnMarbles,
+    ageTier, botScore, chamber, chamberSpec, currentPot, drawnMarbles,
+    estimateFeedback, estimateSlider, handleLockEstimate, handlePlayerBank,
+    handlePlayerPress, lastDice, lastOutcome, mode, odds, playerName,
+    playerScore, prefersReducedMotion, roundNumber, setEstimateSlider,
+    setShowEvCoach, showEvCoach, spinnerRotation, spinnerWheel, turnLog,
+    turnOwner, urnMarbles,
   } = r;
   return (
         <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">

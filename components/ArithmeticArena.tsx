@@ -10,13 +10,7 @@ import { useArithmeticArena, type ArithmeticArenaProps } from './arena/useArithm
 export default function ArithmeticArena(props: ArithmeticArenaProps) {
   const r = useArithmeticArena(props);
   const {
-    activeSpec,
-    gameId,
-    onBackToStudio,
-    phase,
-    problem,
-    setGameId,
-    setPhase,
+    activeSpec, gameId, onBackToStudio, phase, problem, setGameId, setPhase,
     tierSpec,
   } = r;
   return (

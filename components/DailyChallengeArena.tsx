@@ -10,12 +10,7 @@ import { useDailyChallengeArena, type DailyChallengeArenaProps } from './arena/u
 export default function DailyChallengeArena(props: DailyChallengeArenaProps) {
   const r = useDailyChallengeArena(props);
   const {
-    activeCompletion,
-    countdownText,
-    onBackToStudio,
-    phase,
-    puzzle,
-    streakStats,
+    activeCompletion, countdownText, onBackToStudio, phase, puzzle, streakStats,
   } = r;
   return (
     <main className="mx-auto max-w-[1160px] px-4 py-7 sm:px-6 lg:px-8">

@@ -5,25 +5,10 @@ import type { FactorGridCtx } from './useFactorGrid';
 
 export default function FactorGridBoardZone({ r }: { r: FactorGridCtx }) {
   const {
-    activeActorName,
-    activePreview,
-    aiThinking,
-    freshTilesSet,
-    game,
-    gridColsClass,
-    handleTileClick,
-    highlightedDivisors,
-    hintNote,
-    hintTile,
-    hoveredTile,
-    inspectedNumber,
-    legalMovesSet,
-    p1SharePercent,
-    remainingLegalCount,
-    scoreDiff,
-    setHintNote,
-    setHintTile,
-    setHoveredTile,
+    activeActorName, activePreview, aiThinking, freshTilesSet, game,
+    gridColsClass, handleTileClick, highlightedDivisors, hintNote, hintTile,
+    hoveredTile, inspectedNumber, legalMovesSet, p1SharePercent,
+    remainingLegalCount, scoreDiff, setHintNote, setHintTile, setHoveredTile,
     tilesArray,
   } = r;
   return (

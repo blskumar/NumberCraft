@@ -1,4 +1,4 @@
-import { TIER_ORDER } from './daily-constants';
+import { TIER_ORDER } from './arena-shared';
 import AchievementSealIcon from '@/components/AchievementSealIcon';
 import { generateDailyPuzzle } from '@/lib/daily-challenge';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
@@ -7,16 +7,8 @@ import type { DailyCtx } from './useDailyChallengeArena';
 
 export default function DailyBriefing({ r }: { r: DailyCtx }) {
   const {
-    ageTier,
-    dailyBadgeStatuses,
-    onChangeTier,
-    onOpenNotebook,
-    onToggleSound,
-    playerName,
-    puzzle,
-    soundEnabled,
-    startDailyRun,
-    todayKey,
+    ageTier, dailyBadgeStatuses, onChangeTier, onOpenNotebook, onToggleSound,
+    playerName, puzzle, soundEnabled, startDailyRun, todayKey,
   } = r;
   return (
         <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">

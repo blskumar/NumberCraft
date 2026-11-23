@@ -1,36 +1,18 @@
-import { TOTAL_ROUNDS } from './odds-urns-constants';
-import { TurnLogEntry } from './odds-urns-types';
+import { AiArenaProps, TOTAL_ROUNDS, TurnLogEntry } from './arena-shared';
 import { type AchievementDefinition } from '@/lib/achievements';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { CHAMBER_SPECS, buildOddsUrnsMatchRecord, computeChamberOdds, createInitialSpinnerWheel, createInitialUrn, decideEvBotAction, evaluateOddsEstimate, executeChamberDraw, type DrawOutcome, type ProbabilityChamber, type SpinnerWheelState, type UrnMarble } from '@/lib/odds-urns-engine';
 import { playArithmeticFeedbackSound, playTileClaimSound, playVictoryChord } from '@/lib/sound';
-import { type AgeTier, type AiDifficulty, type MatchRecord, type PlayMode } from '@/lib/types';
+import { type AgeTier, type AiDifficulty, type PlayMode } from '@/lib/types';
 import { useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export interface OddsUrnsArenaProps {
-  ageTier: AgeTier;
-  onChangeTier: (tier: AgeTier) => void;
-  playerName: string;
-  soundEnabled: boolean;
-  onToggleSound: () => void;
-  onBackToStudio: () => void;
-  onOpenNotebook: () => void;
-  onRecordMatch: (record: MatchRecord) => AchievementDefinition[];
-  guestTrialLocked?: boolean;
-  onRequireRegistration?: () => void;
-}
+export type OddsUrnsArenaProps = AiArenaProps;
 
 export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
   const {
-    ageTier,
-    onChangeTier,
-    playerName,
-    soundEnabled,
-    onToggleSound,
-    onBackToStudio,
-    onOpenNotebook,
-    onRecordMatch,
+    ageTier, onChangeTier, playerName, soundEnabled, onToggleSound,
+    onBackToStudio, onOpenNotebook, onRecordMatch,
     guestTrialLocked = false,
     onRequireRegistration,
   } = props;
@@ -85,9 +67,7 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
       computeChamberOdds({
         chamber,
         tier: ageTier,
-        urnMarbles,
-        spinnerWheel,
-        currentPot,
+        urnMarbles, spinnerWheel, currentPot,
       }),
     [ageTier, chamber, currentPot, spinnerWheel, urnMarbles]
   );
@@ -106,9 +86,7 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
       setTurnLog((prev) => [
         {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          actor,
-          message,
-          tone,
+          actor, message, tone,
         },
         ...prev.slice(0, 9),
       ]);
@@ -135,9 +113,7 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
         mode === 'solo' ? TOTAL_ROUNDS * 32 : finalBotScore;
       const record = buildOddsUrnsMatchRecord({
         tier: ageTier,
-        mode,
-        aiDifficulty,
-        chamber,
+        mode, aiDifficulty, chamber,
         playerScore: finalPlayerScore,
         opponentScore: targetOpponentScore,
       });
@@ -147,12 +123,7 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
       playVictoryChord(soundEnabled);
     },
     [
-      ageTier,
-      aiDifficulty,
-      chamber,
-      clearBotTimer,
-      mode,
-      onRecordMatch,
+      ageTier, aiDifficulty, chamber, clearBotTimer, mode, onRecordMatch,
       soundEnabled,
     ]
   );
@@ -187,13 +158,8 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
       playTileClaimSound(soundEnabled, true);
     },
     [
-      ageTier,
-      chamber,
-      clearBotTimer,
-      guestTrialLocked,
-      onRequireRegistration,
-      resetChamberForTurn,
-      soundEnabled,
+      ageTier, chamber, clearBotTimer, guestTrialLocked, onRequireRegistration,
+      resetChamberForTurn, soundEnabled,
     ]
   );
 
@@ -250,9 +216,7 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
     estimateFeedback?.locked,
     estimateSlider,
     odds.safePercent,
-    playerName,
-    soundEnabled,
-    turnOwner,
+    playerName, soundEnabled, turnOwner,
   ]);
 
   const handlePlayerPress = useCallback(() => {
@@ -321,18 +285,8 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
       advanceAfterPlayerTurn(nextScore);
     }
   }, [
-    advanceAfterPlayerTurn,
-    ageTier,
-    appendLog,
-    chamber,
-    currentPot,
-    phase,
-    playerName,
-    playerScore,
-    soundEnabled,
-    spinnerWheel,
-    turnOwner,
-    urnMarbles,
+    advanceAfterPlayerTurn, ageTier, appendLog, chamber, currentPot, phase,
+    playerName, playerScore, soundEnabled, spinnerWheel, turnOwner, urnMarbles,
   ]);
 
   const handlePlayerBank = useCallback(() => {
@@ -347,14 +301,8 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
     );
     advanceAfterPlayerTurn(nextScore);
   }, [
-    advanceAfterPlayerTurn,
-    appendLog,
-    currentPot,
-    phase,
-    playerName,
-    playerScore,
-    soundEnabled,
-    turnOwner,
+    advanceAfterPlayerTurn, appendLog, currentPot, phase, playerName,
+    playerScore, soundEnabled, turnOwner,
   ]);
 
   // Explainable EV Bot automated turn playback
@@ -427,69 +375,21 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
 
     return clearBotTimer;
   }, [
-    ageTier,
-    aiDifficulty,
-    appendLog,
-    botScore,
-    chamber,
-    clearBotTimer,
-    currentPot,
-    drawsThisTurn,
-    finishMatch,
-    odds,
-    phase,
-    playerScore,
-    resetChamberForTurn,
-    roundNumber,
-    soundEnabled,
-    spinnerWheel,
-    turnOwner,
+    ageTier, aiDifficulty, appendLog, botScore, chamber, clearBotTimer,
+    currentPot, drawsThisTurn, finishMatch, odds, phase, playerScore,
+    resetChamberForTurn, roundNumber, soundEnabled, spinnerWheel, turnOwner,
     urnMarbles,
   ]);
 
   return {
-    activeTierSpec,
-    ageTier,
-    aiDifficulty,
-    botScore,
-    calibrationHits,
-    chamber,
-    chamberSpec,
-    currentPot,
-    drawnMarbles,
-    estimateFeedback,
-    estimateSlider,
-    handleLockEstimate,
-    handlePlayerBank,
-    handlePlayerPress,
-    lastDice,
-    lastOutcome,
-    mode,
-    odds,
-    onBackToStudio,
-    onChangeTier,
-    onOpenNotebook,
-    onToggleSound,
-    phase,
-    playerName,
-    playerScore,
-    prefersReducedMotion,
-    roundNumber,
-    setAiDifficulty,
-    setChamber,
-    setEstimateSlider,
-    setMode,
-    setPhase,
-    setShowEvCoach,
-    showEvCoach,
-    soundEnabled,
-    spinnerRotation,
-    spinnerWheel,
-    startSession,
-    turnLog,
-    turnOwner,
-    unlockedBadges,
-    urnMarbles,
+    activeTierSpec, ageTier, aiDifficulty, botScore, calibrationHits, chamber,
+    chamberSpec, currentPot, drawnMarbles, estimateFeedback, estimateSlider,
+    handleLockEstimate, handlePlayerBank, handlePlayerPress, lastDice,
+    lastOutcome, mode, odds, onBackToStudio, onChangeTier, onOpenNotebook,
+    onToggleSound, phase, playerName, playerScore, prefersReducedMotion,
+    roundNumber, setAiDifficulty, setChamber, setEstimateSlider, setMode,
+    setPhase, setShowEvCoach, showEvCoach, soundEnabled, spinnerRotation,
+    spinnerWheel, startSession, turnLog, turnOwner, unlockedBadges, urnMarbles,
   };
 }
 
