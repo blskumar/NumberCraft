@@ -6,7 +6,7 @@ const LINKS = [
 
 export default function LegalFooter() {
   return (
-    <footer className="px-4 py-6 text-center text-xs text-[#5A6572]">
+    <div className="px-4 py-6 text-center text-xs text-[#5A6572]">
       <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-4 gap-y-1">
         {LINKS.map((l) => (
           <a
@@ -18,6 +18,6 @@ export default function LegalFooter() {
           </a>
         ))}
       </nav>
-    </footer>
+    </div>
   );
 }

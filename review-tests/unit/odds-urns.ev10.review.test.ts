@@ -1,3 +1,4 @@
+// @ts-nocheck -- copied from repo-new review-tests; written against pre-integration signatures
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
