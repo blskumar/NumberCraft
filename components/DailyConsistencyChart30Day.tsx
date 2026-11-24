@@ -13,12 +13,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ArrowRight, CalendarDays, Database } from 'lucide-react';
+import { ArrowRight, CalendarDays } from 'lucide-react';
 import type {
   DailyConsistency30DayData,
   DailyFrequency30DayPoint,
   WeeklyConsistencyBucket,
 } from '@/lib/performance-dashboard';
+import SampleDailyActions from './dashboard/SampleDailyActions';
 
 interface DailyConsistencyChart30DayProps {
   data: DailyConsistency30DayData;
@@ -412,26 +413,12 @@ export default function DailyConsistencyChart30Day({
             Complete today&apos;s Daily Math Challenge to raise your first
             emerald bar on the 30-day timeline.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            {!hasSampleData && (
-              <button
-                type="button"
-                onClick={onLoadSampleDashboard}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#D8D1C4] bg-white px-3 py-1.5 text-xs font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] whitespace-nowrap shrink-0"
-              >
-                <Database className="h-3.5 w-3.5" aria-hidden="true" />
-                Load Sample Progress
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onOpenDaily}
-              className="btn-cobalt inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0"
-            >
-              Start Daily Challenge
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </div>
+          <SampleDailyActions
+            className="flex flex-wrap items-center gap-2"
+            hasSampleData={hasSampleData}
+            onLoadSampleDashboard={onLoadSampleDashboard}
+            onOpenDaily={onOpenDaily}
+          />
         </div>
       )}
     </section>
