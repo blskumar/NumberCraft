@@ -1,4 +1,5 @@
 import { AiArenaProps, TOTAL_ROUNDS } from './arena-shared';
+import { useRoundProgress } from './useRoundProgress';
 import { type AchievementDefinition } from '@/lib/achievements';
 import { buildFoundryMatchRecord, computeAiFoundryScore, evaluateFoundryTokens, formatFoundryTokens, generateFoundryPuzzle, scoreFoundrySubmission, type FoundryOperator, type FoundryPuzzle, type FoundryRoundOutcome, type FoundryTile, type FoundryToken } from '@/lib/equation-foundry-engine';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
@@ -38,6 +39,13 @@ export function useEquationFoundryArena(props: EquationFoundryArenaProps) {
   const [aiTotal, setAiTotal] = useState(0);
   const [unlockedBadges, setUnlockedBadges] = useState<AchievementDefinition[]>(
     []
+  );
+
+  useRoundProgress(
+    props.onRoundProgress,
+    phase === 'playing',
+    history.filter((h) => h.exact).length,
+    history.length
   );
 
   const activeTierSpec = TIER_SPECS[ageTier];

@@ -206,6 +206,15 @@ export default function NumbercraftApp() {
   const [pendingSessionSummary, setPendingSessionSummary] =
     useState<ArenaSessionStats | null>(null);
 
+  // Unrecorded round in flight (arenas report snapshots; see useRoundProgress)
+  const roundProgressRef = useRef({ solved: 0, attempted: 0 });
+  const handleRoundProgress = useCallback(
+    (p: { solved: number; attempted: number }) => {
+      roundProgressRef.current = p;
+    },
+    []
+  );
+
   const sessionAccumulatorRef = useRef({
     problemsSolved: 0,
     problemsAttempted: 0,
@@ -437,6 +446,7 @@ export default function NumbercraftApp() {
 
   const resetArenaSession = useCallback(() => {
     setSessionElapsedSeconds(0);
+    roundProgressRef.current = { solved: 0, attempted: 0 };
     sessionAccumulatorRef.current = {
       problemsSolved: 0,
       problemsAttempted: 0,
@@ -479,17 +489,19 @@ export default function NumbercraftApp() {
         return;
       }
 
+      const inFlight = roundProgressRef.current;
       const idleVisit =
         sessionAccumulatorRef.current.problemsAttempted === 0 &&
-        sessionAccumulatorRef.current.matchesRecorded === 0;
+        sessionAccumulatorRef.current.matchesRecorded === 0 &&
+        inFlight.attempted === 0;
       if (isActiveGameTab(activeTab) && !idleVisit) {
         const acc = sessionAccumulatorRef.current;
         const summary = buildEndOfSessionSummary({
           arenaTab: activeTab,
           arenaLabel: TAB_DEST_LABELS[activeTab],
           elapsedSeconds: sessionElapsedSeconds,
-          problemsSolved: acc.problemsSolved,
-          problemsAttempted: acc.problemsAttempted,
+          problemsSolved: acc.problemsSolved + inFlight.solved,
+          problemsAttempted: acc.problemsAttempted + inFlight.attempted,
           matchesRecorded: acc.matchesRecorded,
           newlyEarnedSeals: acc.newlyEarnedSeals,
           evaluation: achievementEvaluation,
@@ -1104,6 +1116,7 @@ export default function NumbercraftApp() {
                   onCompleteDaily={handleCompleteDaily}
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
+                  onRoundProgress={handleRoundProgress}
                 />
               </div>
             )}
@@ -1144,6 +1157,7 @@ export default function NumbercraftApp() {
                   onToggleSound={handleToggleSound}
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
+                  onRoundProgress={handleRoundProgress}
                   onRecordMatch={handleRecordMatch}
                   matches={matches}
                   isGameLockedForGuest={(gid) => guestLockedGames[gid]}
@@ -1198,6 +1212,7 @@ export default function NumbercraftApp() {
                   onToggleSound={handleToggleSound}
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
+                  onRoundProgress={handleRoundProgress}
                   onRecordMatch={handleRecordMatch}
                   guestTrialLocked={guestLockedGames['equation-foundry']}
                   onRequireRegistration={() =>
@@ -1224,6 +1239,7 @@ export default function NumbercraftApp() {
                   onToggleSound={handleToggleSound}
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
+                  onRoundProgress={handleRoundProgress}
                   onRecordMatch={handleRecordMatch}
                   guestTrialLocked={guestLockedGames['odds-urns']}
                   onRequireRegistration={() =>

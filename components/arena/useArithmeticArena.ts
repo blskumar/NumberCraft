@@ -1,4 +1,5 @@
 import { useKeypadKeyboard } from './useKeypadKeyboard';
+import { useRoundProgress } from './useRoundProgress';
 import { ArenaBaseProps, ArenaPhase } from './arena-shared';
 import { computeHistoricalCalibration, createAdaptiveSession, stepAdaptiveSession, type AdaptiveSessionState } from '@/lib/adaptive-arithmetic';
 import { ARITHMETIC_GAMES, ARITHMETIC_PACES, MULTIPLICATION_STAGES_BY_TIER, buildArithmeticMatchRecord, calculateAnswerPoints, generateArithmeticProblem, getParTargetScore, type ArithmeticAnswerEntry, type ArithmeticProblem, type ArithmeticRoundConfig, type MultiplicationTableFocus } from '@/lib/arithmetic-engine';
@@ -360,6 +361,7 @@ export function useArithmeticArena(props: ArithmeticArenaProps) {
     setInputValue((prev) => prev.slice(0, -1));
   }, []);
 
+  useRoundProgress(props.onRoundProgress, phase === 'playing', solved, attempted);
   useKeypadKeyboard(phase === 'playing', {
     onDigit: handleDigitAppend,
     onMinus: () => handleDigitAppend('-'),

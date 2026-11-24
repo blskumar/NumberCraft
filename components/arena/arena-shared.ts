@@ -33,6 +33,8 @@ export interface ArenaBaseProps {
   onToggleSound: () => void;
   onBackToStudio: () => void;
   onOpenNotebook: () => void;
+  /** Snapshot of the unrecorded round in progress (see useRoundProgress). */
+  onRoundProgress?: (p: { solved: number; attempted: number }) => void;
 }
 
 export interface AiArenaProps extends ArenaBaseProps {

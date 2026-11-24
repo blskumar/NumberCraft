@@ -1,4 +1,5 @@
 import { AiArenaProps, TOTAL_ROUNDS, TurnLogEntry } from './arena-shared';
+import { useRoundProgress } from './useRoundProgress';
 import { type AchievementDefinition } from '@/lib/achievements';
 import { TIER_SPECS } from '@/lib/factor-grid-engine';
 import { CHAMBER_SPECS, buildOddsUrnsMatchRecord, computeChamberOdds, createInitialSpinnerWheel, createInitialUrn, decideEvBotAction, evaluateOddsEstimate, executeChamberDraw, type DrawOutcome, type ProbabilityChamber, type SpinnerWheelState, type UrnMarble } from '@/lib/odds-urns-engine';
@@ -43,6 +44,12 @@ export function useOddsUrnsArena(props: OddsUrnsArenaProps) {
   const [calibrationHits, setCalibrationHits] = useState(0);
 
   // Estimate Odds calibration state (1 per player turn)
+  useRoundProgress(
+    props.onRoundProgress,
+    phase === 'playing',
+    calibrationHits,
+    Math.max(calibrationHits, roundNumber - 1)
+  );
   const [estimateSlider, setEstimateSlider] = useState(70);
   const [estimateFeedback, setEstimateFeedback] = useState<{
     locked: boolean;

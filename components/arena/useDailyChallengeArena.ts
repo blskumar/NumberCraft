@@ -1,4 +1,5 @@
 import { useKeypadKeyboard } from './useKeypadKeyboard';
+import { useRoundProgress } from './useRoundProgress';
 import { ArenaBaseProps, DAILY_BADGE_IDS, DailyPhase } from './arena-shared';
 import { type AchievementDefinition, type AchievementEvaluation } from '@/lib/achievements';
 import { buildDailyShareSummary, calculateDailyScore, computeDailyStreakStats, formatCountdownClock, generateDailyPuzzle, getLocalDateKey, getSecondsUntilNextDaily, getStreakBonusPoints, getStreakRewardSummary } from '@/lib/daily-challenge';
@@ -311,6 +312,8 @@ export function useDailyChallengeArena(props: DailyChallengeArenaProps) {
     setInputValue((prev) => prev.slice(0, -1));
   }, []);
 
+  const stepsDone = solvedValues.filter((v) => v !== null).length;
+  useRoundProgress(props.onRoundProgress, phase === 'playing', stepsDone, stepsDone + mistakes);
   useKeypadKeyboard(phase === 'playing', {
     onDigit: handleDigitAppend,
     onBackspace: handleBackspace,
