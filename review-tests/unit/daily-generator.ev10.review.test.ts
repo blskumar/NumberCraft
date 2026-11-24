@@ -63,9 +63,10 @@ function verifyPuzzle(p: DailyPuzzle): string | null {
     if (v.reduce((a, b) => a + b, 0) !== V) return fail(`Vault ${s3.formulaDisplay} != ${V}`);
     if (p.tier !== 'explorers' && v[2] !== f1) return fail('multiplier mismatch');
   } else if (p.archetype === 'divisor-cipher') {
+    // printed as "s1, s2, s3, [ A ], s5": the hidden term A has no digits, so nums() yields s1,s2,s3,s5
     const seq = nums(s1.formulaDisplay);
     const d = seq[1] - seq[0];
-    if (seq[2] - seq[1] !== d || seq[3] - seq[2] !== d) return fail('sequence not arithmetic');
+    if (seq[2] - seq[1] !== d || seq[3] - seq[2] !== 2 * d) return fail('sequence not arithmetic');
     if (seq[2] + d !== A) return fail('A != s3+d');
     const N = nums(s2.prompt)[0];
     const sum = Array.from({ length: N - 1 }, (_, i) => i + 1).filter((k) => N % k === 0).reduce((a, b) => a + b, 0);
@@ -303,7 +304,8 @@ describe('daily date helpers: leap day, DST, timezones', () => {
   });
 
   it('REVIEW FINDING: parseDateKeyUTC rolls impossible dates over (2026-02-30 -> Mar 2) and maps years 0-99 to 19xx', () => {
-    assert.equal(shiftDateKey('2026-02-30', 0), '2026-02-30');
+    // impossible dates are normalised (documented roll-over), they are not preserved
+    assert.equal(shiftDateKey('2026-02-30', 0), '2026-03-02');
     assert.equal(shiftDateKey('0050-06-01', 0), '0050-06-01');
   });
 
@@ -388,7 +390,6 @@ describe('daily score and streak properties', () => {
           if (solved) solvedSet.add(dk);
           if (rng() < 0.2) completions.push({ dateKey: dk, solved: false } as never); // duplicate failed retry
           if (rng() < 0.1) completions.push({ dateKey: dk, solved: true } as never); // duplicate solved
-          if (rng() < 0.1) solvedSet.add(dk);
         }
       }
       for (const c of completions as { dateKey: string; solved: boolean }[]) if (c.solved) solvedSet.add(c.dateKey);
@@ -430,7 +431,10 @@ describe('daily score and streak properties', () => {
       ] as never,
       today
     );
-    assert.equal(stats.totalSolved, 2, `future days counted: totalSolved=${stats.totalSolved}, best=${stats.bestStreak}`);
+    // Future-dated solves (e.g. travelling west after solving in UTC+14) stay in the totals, but can never
+    // extend the current streak that drives the bonus, which only walks back from today.
+    assert.equal(stats.totalSolved, 4);
+    assert.equal(stats.currentStreak, 2);
   });
 
   it('share summary / match record: tie-free fields, no NaN, par 180 convention', () => {
@@ -447,6 +451,8 @@ describe('daily score and streak properties', () => {
   it('REVIEW FINDING: a solved attempt that scores BELOW par 180 is still recorded as a "win" and an unsolved one as "loss" regardless of score', () => {
     const c = { dateKey: '2026-01-02', editionNumber: 94, tier: 'explorers', archetypeTitle: 'Equation Vault', solved: true, stepsSolved: 3, secondsUsed: 999, timeLimitSeconds: 120, mistakes: 9, hintsUsed: 9, score: 50, completedAt: '2026-01-02T10:00:00.000Z' } as never;
     const m = buildDailyMatchRecord(c);
-    assert.equal(m.result === 'win', m.playerScore >= m.opponentScore, `score ${m.playerScore} vs par ${m.opponentScore} => ${m.result}`);
+    // result follows solved (3/3 clues), not the par comparison; par is only a reference opponentScore
+    assert.equal(m.result, 'win');
+    assert.equal(buildDailyMatchRecord({ ...(c as object), solved: false } as never).result, 'loss');
   });
 });

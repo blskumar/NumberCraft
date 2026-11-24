@@ -160,13 +160,16 @@ export function parseDateKeyUTC(dateKey: string): number {
   if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
     return EPOCH_UTC_MS;
   }
-  return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+  // Date.UTC maps years 0-99 to 1900-1999; setUTCFullYear does not.
+  const d = new Date(0);
+  d.setUTCFullYear(parts[0], parts[1] - 1, parts[2]);
+  return d.getTime();
 }
 
 export function shiftDateKey(dateKey: string, deltaDays: number): string {
   const ms = parseDateKeyUTC(dateKey) + deltaDays * 86_400_000;
   const d = new Date(ms);
-  const year = d.getUTCFullYear();
+  const year = String(d.getUTCFullYear()).padStart(4, '0');
   const month = String(d.getUTCMonth() + 1).padStart(2, '0');
   const day = String(d.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
@@ -203,7 +206,9 @@ export function getSecondsUntilNextDaily(now: Date = new Date()): number {
 }
 
 export function formatCountdownClock(totalSeconds: number): string {
-  const safe = Math.max(0, Math.floor(totalSeconds));
+  const safe = Number.isFinite(totalSeconds)
+    ? Math.max(0, Math.floor(totalSeconds))
+    : 0;
   const hours = String(Math.floor(safe / 3600)).padStart(2, '0');
   const mins = String(Math.floor((safe % 3600) / 60)).padStart(2, '0');
   const secs = String(safe % 60).padStart(2, '0');
@@ -247,6 +252,10 @@ const ARCHETYPE_ROTATION: DailyArchetype[] = [
   'mystery-number',
 ];
 
+function gcdInt(a: number, b: number): number {
+  return b === 0 ? a : gcdInt(b, a % b);
+}
+
 function digitSum(n: number): number {
   return String(Math.abs(n))
     .split('')
@@ -258,10 +267,17 @@ export function generateDailyPuzzle(
   tier: AgeTier
 ): DailyPuzzle {
   const editionNumber = getEditionNumber(dateKey);
+  // Unclamped day index so pre-epoch dates keep rotating through archetypes.
+  const rotationIndex = Math.floor(
+    (parseDateKeyUTC(dateKey) - EPOCH_UTC_MS) / 86_400_000
+  );
   const formattedDate = formatDateKeyLong(dateKey);
   const timeLimitSeconds = DAILY_TIME_LIMITS[tier];
   const archetype =
-    ARCHETYPE_ROTATION[(editionNumber - 1) % ARCHETYPE_ROTATION.length];
+    ARCHETYPE_ROTATION[
+      ((rotationIndex % ARCHETYPE_ROTATION.length) + ARCHETYPE_ROTATION.length) %
+        ARCHETYPE_ROTATION.length
+    ];
   const rng = createMulberry32(hashSeed(`numbercraft-daily:${dateKey}:${tier}`));
 
   if (archetype === 'equation-vault') {
@@ -283,12 +299,14 @@ export function generateDailyPuzzle(
         : randInt(11, Math.min(35, f1 * f2 - 12), rng);
     const a = f1 * f2 - sub;
 
-    const addOffset =
+    let addOffset =
       tier === 'explorers'
         ? randInt(7, 18, rng)
         : tier === 'challengers'
           ? randInt(14, 38, rng)
           : randInt(25, 64, rng);
+    // strategists: B = 2A - offset would equal A when offset == A
+    if (tier === 'strategists' && addOffset === a) addOffset += 1;
     const b = tier === 'strategists' ? a * 2 - addOffset : a + addOffset;
     const vault = tier === 'explorers' ? a + b : a + b + f1;
 
@@ -359,7 +377,7 @@ export function generateDailyPuzzle(
 
   if (archetype === 'divisor-cipher') {
     // Clue 1: Missing term in arithmetic sequence
-    const start =
+    let start =
       tier === 'explorers'
         ? randInt(4, 15, rng)
         : tier === 'challengers'
@@ -371,12 +389,6 @@ export function generateDailyPuzzle(
         : tier === 'challengers'
           ? randInt(6, 14, rng)
           : randInt(9, 19, rng);
-    const s1 = start;
-    const s2 = start + diff;
-    const s3 = start + diff * 2;
-    const a = start + diff * 3;
-    const s5 = start + diff * 4;
-
     // Clue 2: Sum of proper divisors of a crafted composite number
     const candidateN =
       tier === 'explorers'
@@ -387,6 +399,12 @@ export function generateDailyPuzzle(
     const targetN = pickFrom(candidateN, rng);
     const divisors = getProperDivisors(targetN);
     const b = divisors.reduce((sum, d) => sum + d, 0);
+    if (start + diff * 3 === b) start += 1; // keep Key A distinct from Key B
+    const s1 = start;
+    const s2 = start + diff;
+    const s3 = start + diff * 2;
+    const a = start + diff * 3;
+    const s5 = start + diff * 4;
 
     // Clue 3: Combine A and B
     const vault = tier === 'strategists' ? a + b * 2 : a + b;
@@ -469,7 +487,8 @@ export function generateDailyPuzzle(
     const rhs = coeff * a + constant;
 
     const multB = tier === 'explorers' ? 3 : tier === 'challengers' ? 4 : 5;
-    const subB = randInt(2, Math.min(15, a * multB - 3), rng);
+    let subB = randInt(2, Math.min(15, a * multB - 3), rng);
+    if (a * multB - subB === a) subB += 1; // keep Key B distinct from Key A
     const b = a * multB - subB;
     const vault = tier === 'explorers' ? a + b : a * 2 + b;
 
@@ -532,31 +551,37 @@ export function generateDailyPuzzle(
   }
 
   // archetype === 'mystery-number'
-  // Construct a guaranteed-unique mystery number A in a tight interval
-  const factor =
+  // Construct a guaranteed-unique mystery number A in a tight interval.
+  // The (factor, k, stepAdd) space is small, so walk it with a coprime stride
+  // instead of random draws: no repeat until every combination has been used.
+  const factors =
     tier === 'explorers'
-      ? pickFrom([4, 5, 6, 7], rng)
+      ? [4, 5, 6, 7]
       : tier === 'challengers'
-        ? pickFrom([6, 7, 8, 9], rng)
-        : pickFrom([7, 8, 9, 11, 12], rng);
-  const k =
-    tier === 'explorers'
-      ? randInt(3, 6, rng)
-      : tier === 'challengers'
-        ? randInt(5, 9, rng)
-        : randInt(7, 13, rng);
+        ? [6, 7, 8, 9]
+        : [7, 8, 9, 11, 12];
+  const [kLo, kHi] =
+    tier === 'explorers' ? [3, 6] : tier === 'challengers' ? [5, 9] : [7, 13];
+  const [addLo, addHi] =
+    tier === 'explorers' ? [5, 12] : tier === 'challengers' ? [8, 19] : [12, 27];
+  const nK = kHi - kLo + 1;
+  const nAdd = addHi - addLo + 1;
+  const total = factors.length * nK * nAdd;
+  let stride = Math.max(1, Math.round(total * 0.618));
+  while (gcdInt(stride, total) !== 1) stride++;
+  const cycle = Math.floor(rotationIndex / ARCHETYPE_ROTATION.length);
+  const slot =
+    (((cycle * stride + (hashSeed(`mystery:${tier}`) % total)) % total) + total) %
+    total;
+  const factor = factors[slot % factors.length];
+  const k = kLo + (Math.floor(slot / factors.length) % nK);
+  const stepAdd = addLo + Math.floor(slot / (factors.length * nK));
   const a = factor * k;
   // Tight bounds around A containing ONLY A as a multiple of `factor`
   const lowBound = a - (factor - 1);
   const highBound = a + (factor - 1);
   const dSum = digitSum(a);
 
-  const stepAdd =
-    tier === 'explorers'
-      ? randInt(5, 12, rng)
-      : tier === 'challengers'
-        ? randInt(8, 19, rng)
-        : randInt(12, 27, rng);
   const b = tier === 'explorers' ? a + stepAdd : a * 2 - stepAdd;
   const vault = a + b;
 
@@ -635,13 +660,18 @@ export function calculateDailyScore(params: {
     hintsUsed,
     streakDays = 0,
   } = params;
-  const stepPoints = stepsSolved * 50;
-  if (!solved) return Math.max(0, stepPoints - mistakes * 5);
-  const secondsLeft = Math.max(0, timeLimitSeconds - secondsUsed);
+  const fin = (n: number) => (Number.isFinite(n) ? n : 0);
+  const stepPoints = Math.max(0, fin(stepsSolved)) * 50;
+  if (!solved) return Math.max(0, stepPoints - fin(mistakes) * 5);
+  // Unknown elapsed time earns no bonus; negative time cannot earn more than zero time.
+  const used = Number.isFinite(secondsUsed)
+    ? Math.max(0, secondsUsed)
+    : timeLimitSeconds;
+  const secondsLeft = Math.max(0, timeLimitSeconds - used);
   const timeBonus = Math.round((secondsLeft / Math.max(1, timeLimitSeconds)) * 100);
-  const flawlessBonus = mistakes === 0 && hintsUsed === 0 ? 50 : 0;
+  const flawlessBonus = fin(mistakes) === 0 && fin(hintsUsed) === 0 ? 50 : 0;
   const streakBonus = getStreakBonusPoints(streakDays);
-  const penalties = mistakes * 10 + hintsUsed * 15;
+  const penalties = fin(mistakes) * 10 + fin(hintsUsed) * 15;
   return Math.max(50, stepPoints + timeBonus + flawlessBonus + streakBonus - penalties);
 }
 
