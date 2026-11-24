@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import TopNav, { type StudioTab } from '@/components/TopNav';
@@ -14,148 +14,33 @@ import OnlineRoomsPreview from '@/components/OnlineRoomsPreview';
 import MasteryNotebook from '@/components/MasteryNotebook';
 import PerformanceDashboard from '@/components/PerformanceDashboard';
 import GameRulesGuide from '@/components/GameRulesGuide';
-import { hintAllowsCloudScores, readLocalConsentHint } from '@/lib/consent';
-import AccountModal, {
-  type AccountAuthMode,
-  type AccountModalSection,
-} from '@/components/AccountModal';
+import AccountModal from '@/components/AccountModal';
 import MasteryProgressBar from '@/components/MasteryProgressBar';
 import SessionElapsedTimer from '@/components/SessionElapsedTimer';
 import ConfettiCelebration from '@/components/ConfettiCelebration';
 import EndOfSessionModal from '@/components/EndOfSessionModal';
+import GameArenaShell from '@/components/app/GameArenaShell';
+import { TAB_DEST_LABELS, resolveGameIdForTab } from '@/components/app/appHelpers';
+import { useAccountModal } from '@/components/app/useAccountModal';
+import { useAppData } from '@/components/app/useAppData';
+import { useAuthWatch } from '@/components/app/useAuthWatch';
+import { useHydration } from '@/components/app/useHydration';
+import { useMatchRecording } from '@/components/app/useMatchRecording';
+import { useProfileActions } from '@/components/app/useProfileActions';
+import { useSampleData } from '@/components/app/useSampleData';
+import { useSessionTracking } from '@/components/app/useSessionTracking';
+import { useStudioNavigation } from '@/components/app/useStudioNavigation';
 import {
   evaluateAchievements,
   getRecentEarnedAchievements,
-  type AchievementDefinition,
 } from '@/lib/achievements';
-import {
-  buildDailyMatchRecord,
-  getLocalDateKey,
-} from '@/lib/daily-challenge';
-import { clampDailyProblemGoal, DAILY_PROBLEM_GOAL } from '@/lib/daily-goal';
-import {
-  DAILY_MILESTONE_MULTIPLIER,
-  evaluateDailyMilestone,
-  getDailyMilestoneForDate,
-  isMatchForDailyMilestoneArena,
-} from '@/lib/daily-milestone';
-import {
-  beginCloudRound,
-  fetchUserProfileDoc,
-  saveCloudGameScore,
-  subscribeToAuthState,
-  upsertUserProfileDoc,
-} from '@/lib/firebase';
+import { beginCloudRound } from '@/lib/firebase';
 import {
   computeEffectiveGuestTrials,
-  incrementGuestTrialUsage,
   isGuestGameLocked,
-  loadGuestTrialUsage,
-  PLAYABLE_GAME_CATALOG,
   PLAYABLE_GAME_IDS,
-  resolveGameIdFromMatch,
-  saveGuestTrialUsage,
-  type GuestTrialUsageMap,
   type PlayableGameId,
 } from '@/lib/guest-trial';
-import {
-  tryAppendMatch,
-  clearAllLocalProgress,
-  DEFAULT_PROFILE,
-  loadDailyCompletions,
-  loadEarnedBadges,
-  loadMatches,
-  loadProfile,
-  saveDailyCompletions,
-  saveEarnedBadges,
-  saveMatches,
-  saveProfile,
-  upsertDailyCompletion,
-} from '@/lib/storage';
-import {
-  createSampleMatches,
-  isSampleMatch,
-} from '@/lib/notebook-analytics';
-import {
-  createSampleDashboardData,
-  isSampleDailyCompletion,
-} from '@/lib/performance-dashboard';
-import {
-  buildEndOfSessionSummary,
-  isActiveGameTab,
-  type ArenaSessionStats,
-} from '@/lib/session-tracker';
-import { playAchievementChime, playSoundPreviewChime } from '@/lib/sound';
-import { getStudioTabA11yMeta } from '@/lib/studio-a11y';
-import {
-  buildDailyScoreStats,
-  buildMatchScoreStats,
-  type ScoreStats,
-} from '@/lib/score-stats';
-import {
-  applyThemeToDocument,
-  loadThemePreference,
-  readStoredThemePreference,
-  saveThemePreference,
-} from '@/lib/theme';
-import type {
-  AchievementId,
-  AgeTier,
-  ArithmeticGameId,
-  DailyChallengeCompletion,
-  EarnedBadgeRecord,
-  MatchRecord,
-  StudentProfile,
-  ThemePreference,
-} from '@/lib/types';
-
-const TAB_DEST_LABELS: Record<StudioTab, string> = {
-  studio: 'Games Studio',
-  daily: 'Daily Challenge',
-  dashboard: 'Performance Dashboard',
-  'play-arithmetic': 'Core Arithmetic',
-  'play-factor-grid': 'Factor Grid',
-  'play-equation-foundry': 'Equation Foundry',
-  'play-odds-urns': 'Odds & Urns',
-  rooms: 'Online Rooms',
-  notebook: 'Mastery Notebook',
-  rules: 'Rules & Guide',
-};
-
-function resolveGameIdForTab(
-  tab: StudioTab,
-  activeArithmeticGame: ArithmeticGameId
-): PlayableGameId | null {
-  switch (tab) {
-    case 'play-arithmetic':
-      return activeArithmeticGame;
-    case 'play-factor-grid':
-      return 'factor-grid';
-    case 'play-equation-foundry':
-      return 'equation-foundry';
-    case 'play-odds-urns':
-      return 'odds-urns';
-    case 'daily':
-      return 'daily-challenge';
-    default:
-      return null;
-  }
-}
-
-function estimateMatchAccuracy(record: MatchRecord): number {
-  if (record.arithmeticMeta) {
-    return record.arithmeticMeta.accuracyPercent;
-  }
-  if (record.dailyMeta) {
-    const attempts = Math.max(1, 3 + record.dailyMeta.mistakes);
-    return Math.round((record.dailyMeta.stepsSolved / attempts) * 100);
-  }
-  const total = record.playerScore + record.opponentScore;
-  if (total > 0) {
-    return Math.min(100, Math.max(0, Math.round((record.playerScore / total) * 100)));
-  }
-  return record.result === 'win' ? 100 : 50;
-}
 
 export default function NumbercraftApp() {
   const searchParams = useSearchParams();
@@ -164,61 +49,19 @@ export default function NumbercraftApp() {
   const [activeTab, setActiveTab] = useState<StudioTab>(
     autoStartParam ? 'play-factor-grid' : 'studio'
   );
-  const [activeArithmeticGame, setActiveArithmeticGame] =
-    useState<ArithmeticGameId>('addition-attack');
-  const [hydrated, setHydrated] = useState(false);
-  const [profile, setProfile] = useState<StudentProfile>(DEFAULT_PROFILE);
-  const [matches, setMatches] = useState<MatchRecord[]>([]);
-  const [earnedBadges, setEarnedBadges] = useState<EarnedBadgeRecord[]>([]);
-  const [dailyCompletions, setDailyCompletions] = useState<
-    DailyChallengeCompletion[]
-  >([]);
-  const [storedGuestTrials, setStoredGuestTrials] =
-    useState<GuestTrialUsageMap>({});
 
-  // Account modal state (supports direct opening to Email Sign-Up / Guest Trial Gate)
-  const [accountOpen, setAccountOpen] = useState(false);
-  const [accountInitialSection, setAccountInitialSection] =
-    useState<AccountModalSection>('profile');
-  const [accountInitialAuthMode, setAccountInitialAuthMode] =
-    useState<AccountAuthMode>('signin');
-  const [registrationGateGameTitle, setRegistrationGateGameTitle] = useState<
-    string | null
-  >(null);
+  const data = useAppData();
+  const { profile, matches, earnedBadges, dailyCompletions, storedGuestTrials } = data;
 
-  const [recentlyUnlockedBadgeIds, setRecentlyUnlockedBadgeIds] = useState<
-    AchievementId[]
-  >([]);
-  const [tabAnnouncement, setTabAnnouncement] = useState('');
-  const [themePreference, setThemePreference] =
-    useState<ThemePreference>('system');
+  const account = useAccountModal();
+  const { openAccountModal, openRegistrationGate } = account;
+  const session = useSessionTracking(activeTab);
+  const { inActiveGameArena, sessionElapsedSeconds, pendingLeaveTab, pendingSessionSummary } = session;
 
-  // Confetti celebration burst counter & MasteryProgressBar unlock highlight signal
-  const [confettiTriggerKey, setConfettiTriggerKey] = useState(0);
-  const [masteryUnlockEventKey, setMasteryUnlockEventKey] = useState(0);
-  const [latestUnlockedSealTitle, setLatestUnlockedSealTitle] = useState<
-    string | null
-  >(null);
-
-  // Subtle persistent session timer + End-of-Session reflection modal state
-  const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
-  const [pendingLeaveTab, setPendingLeaveTab] = useState<StudioTab | null>(null);
-  const [pendingSessionSummary, setPendingSessionSummary] =
-    useState<ArenaSessionStats | null>(null);
-
-  const sessionAccumulatorRef = useRef({
-    problemsSolved: 0,
-    problemsAttempted: 0,
-    matchesRecorded: 0,
-    newlyEarnedSeals: [] as string[],
-  });
-
-  const earnedBadgesRef = useRef<EarnedBadgeRecord[]>(earnedBadges);
-  const profileRef = useRef<StudentProfile>(profile);
-  const matchesRef = useRef<MatchRecord[]>(matches);
-  const dailyRef = useRef<DailyChallengeCompletion[]>(dailyCompletions);
-  const storedGuestTrialsRef = useRef<GuestTrialUsageMap>(storedGuestTrials);
-  const hasMountedTabRef = useRef(false);
+  const profileActions = useProfileActions(data);
+  const { themePreference, handleChangeTheme, handleChangeTier, handleToggleSound } = profileActions;
+  const hydrated = useHydration(data, profileActions.setThemePreference);
+  useAuthWatch(data, hydrated);
 
   const isSignedIn =
     profile.sessionKind === 'authenticated' && Boolean(profile.uid);
@@ -253,174 +96,6 @@ export default function NumbercraftApp() {
     return locked;
   }, [effectiveGuestTrials, isSignedIn]);
 
-  const openAccountModal = useCallback(
-    (opts?: {
-      section?: AccountModalSection;
-      authMode?: AccountAuthMode;
-      gateGameId?: PlayableGameId | null;
-    }) => {
-      setAccountInitialSection(opts?.section ?? 'profile');
-      setAccountInitialAuthMode(opts?.authMode ?? 'signin');
-      setRegistrationGateGameTitle(
-        opts?.gateGameId ? PLAYABLE_GAME_CATALOG[opts.gateGameId].title : null
-      );
-      setAccountOpen(true);
-    },
-    []
-  );
-
-  const openRegistrationGate = useCallback(
-    (gameId?: PlayableGameId) => {
-      openAccountModal({
-        section: 'auth',
-        authMode: 'signup',
-        gateGameId: gameId ?? null,
-      });
-    },
-    [openAccountModal]
-  );
-
-  const inActiveGameArena = isActiveGameTab(activeTab);
-
-  const activeTabA11y = useMemo(
-    () => getStudioTabA11yMeta(activeTab, activeArithmeticGame),
-    [activeTab, activeArithmeticGame]
-  );
-
-  // Announce active studio tab / game arena changes politely to screen readers
-  useEffect(() => {
-    if (!hasMountedTabRef.current) {
-      hasMountedTabRef.current = true;
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setTabAnnouncement(activeTabA11y.announcement);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [activeTabA11y.announcement]);
-
-  // Persistent elapsed session clock while inside an active game arena
-  useEffect(() => {
-    if (!inActiveGameArena || pendingLeaveTab !== null) return;
-    const id = window.setInterval(() => {
-      setSessionElapsedSeconds((prev) => prev + 1);
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [inActiveGameArena, pendingLeaveTab]);
-
-  // Hydrate local profile, guest trial usage, match ledger, daily history, and latched Mastery Seals once on mount
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try {
-      const loadedProfile = loadProfile();
-      const loadedMatches = loadMatches();
-      const loadedBadges = loadEarnedBadges();
-      const loadedDaily = loadDailyCompletions();
-      const loadedGuestTrials = loadGuestTrialUsage();
-      // Single source of truth: the theme key wins over the profile mirror.
-      const loadedTheme = readStoredThemePreference() ?? loadedProfile.themePreference ?? loadThemePreference();
-      applyThemeToDocument(loadedTheme);
-      setThemePreference(loadedTheme);
-
-      const reconciled = evaluateAchievements(
-        loadedMatches,
-        loadedBadges,
-        loadedDaily
-      );
-      let nextProfile = loadedProfile;
-      if (reconciled.newlyUnlocked.length > 0) {
-        saveEarnedBadges(reconciled.earnedRecords);
-        if (!loadedProfile.featuredBadgeId) {
-          nextProfile = {
-            ...loadedProfile,
-            featuredBadgeId: reconciled.newlyUnlocked[0].id,
-          };
-          saveProfile(nextProfile);
-        }
-      }
-
-      profileRef.current = nextProfile;
-      earnedBadgesRef.current = reconciled.earnedRecords;
-      matchesRef.current = loadedMatches;
-      dailyRef.current = loadedDaily;
-      storedGuestTrialsRef.current = loadedGuestTrials;
-      setProfile(nextProfile);
-      setMatches(loadedMatches);
-      setEarnedBadges(reconciled.earnedRecords);
-      setDailyCompletions(loadedDaily);
-      setStoredGuestTrials(loadedGuestTrials);
-      } catch {
-        // Unexpected stored data: fall back to defaults instead of hanging.
-      } finally {
-        setHydrated(true);
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  // Guests never load Firebase: start watching auth only once a signed-in
-  // profile is seen (restored from storage, or after sign-in).
-  const [watchAuth, setWatchAuth] = useState(false);
-  if (profile.sessionKind === 'authenticated' && !watchAuth) {
-    setWatchAuth(true);
-  }
-
-  useEffect(() => {
-    // Wait for hydration so the auth callback never overwrites the stored profile.
-    if (!watchAuth || !hydrated) return;
-    const unsubscribe = subscribeToAuthState(async (firebaseUser) => {
-      if (firebaseUser) {
-        let remoteProfile = null;
-        try {
-          remoteProfile = await fetchUserProfileDoc(firebaseUser.uid);
-        } catch {
-          remoteProfile = null;
-        }
-
-        const current = profileRef.current;
-        const resolvedName =
-          remoteProfile?.displayName ||
-          firebaseUser.displayName?.trim() ||
-          (current.displayName !== 'Guest Explorer'
-            ? current.displayName
-            : (firebaseUser.email ?? 'Scholar').split('@')[0].slice(0, 24));
-
-        const nextProfile: StudentProfile = {
-          ...current,
-          uid: firebaseUser.uid,
-          displayName: resolvedName.slice(0, 28),
-          ageTier: remoteProfile?.ageTier ?? current.ageTier,
-          dailyProblemGoal:
-            remoteProfile?.dailyProblemGoal ??
-            current.dailyProblemGoal ??
-            DAILY_PROBLEM_GOAL,
-          sessionKind: 'authenticated',
-          authProvider: 'email',
-          email: firebaseUser.email ?? remoteProfile?.email ?? current.email,
-        };
-        profileRef.current = nextProfile;
-        setProfile(nextProfile);
-        saveProfile(nextProfile);
-      } else {
-        const current = profileRef.current;
-        if (current.sessionKind === 'authenticated' || current.uid) {
-          const guestProfile: StudentProfile = {
-            ...current,
-            uid: null,
-            sessionKind: 'guest',
-            authProvider: 'guest',
-            email: null,
-          };
-          profileRef.current = guestProfile;
-          setProfile(guestProfile);
-          saveProfile(guestProfile);
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, [watchAuth, hydrated]);
-
   const achievementEvaluation = useMemo(
     () => evaluateAchievements(matches, earnedBadges, dailyCompletions),
     [matches, earnedBadges, dailyCompletions]
@@ -435,247 +110,18 @@ export default function NumbercraftApp() {
     [achievementEvaluation]
   );
 
-  const resetArenaSession = useCallback(() => {
-    setSessionElapsedSeconds(0);
-    sessionAccumulatorRef.current = {
-      problemsSolved: 0,
-      problemsAttempted: 0,
-      matchesRecorded: 0,
-      newlyEarnedSeals: [],
-    };
-  }, []);
+  const nav = useStudioNavigation({
+    activeTab,
+    setActiveTab,
+    data,
+    session,
+    achievementEvaluation,
+    openRegistrationGate,
+  });
+  const { activeArithmeticGame, activeTabA11y, requestNavigateTab, handleLaunchArithmetic } = nav;
 
-  const isGameLockedNow = useCallback(
-    (gameId: PlayableGameId) => {
-      const signedIn =
-        profileRef.current.sessionKind === 'authenticated' &&
-        Boolean(profileRef.current.uid);
-      const trials = computeEffectiveGuestTrials(
-        storedGuestTrialsRef.current,
-        matchesRef.current,
-        dailyRef.current
-      );
-      return isGuestGameLocked({
-        isSignedIn: signedIn,
-        gameId,
-        trialUsage: trials,
-      });
-    },
-    []
-  );
-
-  /**
-   * Navigates between studio tabs. Enforces the 1-free-level-per-game guest
-   * trial gate when entering any game tab, and shows the End-of-Session
-   * reflection modal when leaving an active game arena.
-   */
-  const requestNavigateTab = useCallback(
-    (nextTab: StudioTab) => {
-      if (nextTab === activeTab) return;
-
-      const targetGameId = resolveGameIdForTab(nextTab, activeArithmeticGame);
-      if (targetGameId && isGameLockedNow(targetGameId)) {
-        openRegistrationGate(targetGameId);
-        return;
-      }
-
-      const idleVisit =
-        sessionAccumulatorRef.current.problemsAttempted === 0 &&
-        sessionAccumulatorRef.current.matchesRecorded === 0;
-      if (isActiveGameTab(activeTab) && !idleVisit) {
-        const acc = sessionAccumulatorRef.current;
-        const summary = buildEndOfSessionSummary({
-          arenaTab: activeTab,
-          arenaLabel: TAB_DEST_LABELS[activeTab],
-          elapsedSeconds: sessionElapsedSeconds,
-          problemsSolved: acc.problemsSolved,
-          problemsAttempted: acc.problemsAttempted,
-          matchesRecorded: acc.matchesRecorded,
-          newlyEarnedSeals: acc.newlyEarnedSeals,
-          evaluation: achievementEvaluation,
-        });
-        setPendingSessionSummary(summary);
-        setPendingLeaveTab(nextTab);
-        return;
-      }
-
-      if (isActiveGameTab(nextTab)) {
-        resetArenaSession();
-      }
-      setActiveTab(nextTab);
-    },
-    [
-      achievementEvaluation,
-      activeArithmeticGame,
-      activeTab,
-      isGameLockedNow,
-      openRegistrationGate,
-      resetArenaSession,
-      sessionElapsedSeconds,
-    ]
-  );
-
-  const handleConfirmLeaveArena = useCallback(() => {
-    if (!pendingLeaveTab) return;
-    const dest = pendingLeaveTab;
-    setPendingLeaveTab(null);
-    setPendingSessionSummary(null);
-    resetArenaSession();
-    setActiveTab(dest);
-  }, [pendingLeaveTab, resetArenaSession]);
-
-  const handleStayInArena = useCallback(() => {
-    setPendingLeaveTab(null);
-    setPendingSessionSummary(null);
-  }, []);
-
-  const syncProfileToCloudIfSignedIn = useCallback((next: StudentProfile) => {
-    if (next.sessionKind === 'authenticated' && next.uid && next.email) {
-      void upsertUserProfileDoc({
-        uid: next.uid,
-        displayName: next.displayName,
-        email: next.email,
-        ageTier: next.ageTier,
-        dailyProblemGoal: next.dailyProblemGoal ?? DAILY_PROBLEM_GOAL,
-      }).catch(() => {
-        // Non-blocking cloud profile sync
-      });
-    }
-  }, []);
-
-  const handleUpdateProfile = useCallback(
-    (next: StudentProfile) => {
-      profileRef.current = next;
-      setProfile(next);
-      saveProfile(next);
-      syncProfileToCloudIfSignedIn(next);
-    },
-    [syncProfileToCloudIfSignedIn]
-  );
-
-  const handleClearLocalProgress = useCallback(() => {
-    clearAllLocalProgress(); // also clears guest trials + profile prefs
-    storedGuestTrialsRef.current = {};
-    setStoredGuestTrials({});
-    const resetProfile = loadProfile();
-    profileRef.current = resetProfile;
-    setProfile(resetProfile);
-    earnedBadgesRef.current = [];
-    matchesRef.current = [];
-    dailyRef.current = [];
-    setMatches([]);
-    setEarnedBadges([]);
-    setDailyCompletions([]);
-  }, []);
-
-  const handleSelectFeaturedBadge = useCallback((id: AchievementId | null) => {
-    setProfile((prev) => {
-      const next: StudentProfile = { ...prev, featuredBadgeId: id };
-      profileRef.current = next;
-      saveProfile(next);
-      return next;
-    });
-  }, []);
-
-  const handleChangeTier = useCallback(
-    (tier: AgeTier) => {
-      setProfile((prev) => {
-        const next = { ...prev, ageTier: tier };
-        profileRef.current = next;
-        saveProfile(next);
-        syncProfileToCloudIfSignedIn(next);
-        return next;
-      });
-    },
-    [syncProfileToCloudIfSignedIn]
-  );
-
-  const handleChangeTheme = useCallback((nextTheme: ThemePreference) => {
-    setThemePreference(nextTheme);
-    saveThemePreference(nextTheme);
-    applyThemeToDocument(nextTheme);
-    setProfile((prev) => {
-      const next: StudentProfile = { ...prev, themePreference: nextTheme };
-      profileRef.current = next;
-      saveProfile(next);
-      return next;
-    });
-  }, []);
-
-  // Follow OS prefers-color-scheme live when user selected System mode
-  useEffect(() => {
-    applyThemeToDocument(themePreference);
-    if (
-      themePreference !== 'system' ||
-      typeof window === 'undefined' ||
-      !window.matchMedia
-    ) {
-      return;
-    }
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => applyThemeToDocument('system');
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, [themePreference]);
-
-  const handleToggleSound = useCallback(() => {
-    setProfile((prev) => {
-      const next = { ...prev, soundEnabled: !prev.soundEnabled };
-      profileRef.current = next;
-      saveProfile(next);
-      if (next.soundEnabled) {
-        playSoundPreviewChime(true);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleLaunchArithmetic = useCallback(
-    (gameId: ArithmeticGameId) => {
-      if (isGameLockedNow(gameId)) {
-        openRegistrationGate(gameId);
-        return;
-      }
-      setActiveArithmeticGame(gameId);
-      resetArenaSession();
-      setActiveTab('play-arithmetic');
-    },
-    [isGameLockedNow, openRegistrationGate, resetArenaSession]
-  );
-
-  const handleLaunchAnyGame = useCallback(
-    (gameId: PlayableGameId) => {
-      if (isGameLockedNow(gameId)) {
-        openRegistrationGate(gameId);
-        return;
-      }
-      switch (gameId) {
-        case 'addition-attack':
-        case 'subtraction-sprint':
-        case 'multiplication-mastery':
-          handleLaunchArithmetic(gameId);
-          break;
-        case 'equation-foundry':
-          requestNavigateTab('play-equation-foundry');
-          break;
-        case 'odds-urns':
-          requestNavigateTab('play-odds-urns');
-          break;
-        case 'factor-grid':
-          requestNavigateTab('play-factor-grid');
-          break;
-        case 'daily-challenge':
-          requestNavigateTab('daily');
-          break;
-      }
-    },
-    [
-      handleLaunchArithmetic,
-      isGameLockedNow,
-      openRegistrationGate,
-      requestNavigateTab,
-    ]
-  );
+  const recording = useMatchRecording(data, session.sessionAccumulatorRef);
+  const sampleData = useSampleData(data);
 
   // Server-timed round token: opened when a signed-in player enters a game
   // screen (and re-opened after each submit by saveCloudGameScore). Guests and
@@ -685,307 +131,8 @@ export default function NumbercraftApp() {
   useEffect(() => {
     if (!signedInUid) return;
     const gameId = resolveGameIdForTab(activeTab, activeArithmeticGame);
-    if (gameId) void beginCloudRound(gameId, profileRef.current.ageTier);
-  }, [signedInUid, activeTab, activeArithmeticGame]);
-
-  const recordGuestTrialOrPersistCloudScore = useCallback(
-    (params: {
-      gameId: PlayableGameId;
-      tier: AgeTier;
-      score: number;
-      accuracyPercent: number;
-      dateKey: string;
-      stats: ScoreStats;
-    }) => {
-      const currentProfile = profileRef.current;
-      const signedIn =
-        currentProfile.sessionKind === 'authenticated' &&
-        Boolean(currentProfile.uid);
-
-      // Minors without granted parental consent never write cloud scores
-      // (docs/legal/04); server rules must enforce the same (owner action).
-      if (
-        signedIn &&
-        currentProfile.uid &&
-        hintAllowsCloudScores(readLocalConsentHint(), currentProfile.uid)
-      ) {
-        void saveCloudGameScore({
-          uid: currentProfile.uid,
-          displayName: currentProfile.displayName,
-          gameId: params.gameId,
-          tier: params.tier,
-          score: params.score,
-          accuracyPercent: params.accuracyPercent,
-          dateKey: params.dateKey,
-          stats: params.stats,
-        }).catch(() => {
-          // Non-blocking cloud score write (logged by handleFirestoreError)
-        });
-      } else {
-        const updatedTrials = incrementGuestTrialUsage(
-          storedGuestTrialsRef.current,
-          params.gameId
-        );
-        storedGuestTrialsRef.current = updatedTrials;
-        setStoredGuestTrials(updatedTrials);
-        saveGuestTrialUsage(updatedTrials);
-      }
-    },
-    []
-  );
-
-  const handleRecordMatch = useCallback(
-    (record: MatchRecord): AchievementDefinition[] => {
-      const todayKey = getLocalDateKey();
-      const todayMilestone = getDailyMilestoneForDate(todayKey);
-      const wasCompletedBefore = evaluateDailyMilestone(
-        matchesRef.current,
-        todayKey
-      ).completedToday;
-
-      const qualifiesForDailyMilestone = isMatchForDailyMilestoneArena(
-        record,
-        todayMilestone.arenaId
-      );
-      const enrichedRecord: MatchRecord = qualifiesForDailyMilestone
-        ? {
-            ...record,
-            dailyMilestoneMultiplier: DAILY_MILESTONE_MULTIPLIER,
-          }
-        : record;
-
-      const appended = tryAppendMatch(enrichedRecord);
-      const updatedMatches = appended.matches;
-      matchesRef.current = updatedMatches;
-      setMatches(updatedMatches);
-      if (!appended.saved) {
-        console.warn('Numbercraft: could not save this match (browser storage is full or blocked).');
-      }
-
-      // Track 1-level guest trial usage OR save score to Cloud Leaderboard for logged-in users.
-      // Unknown titles map to null and are not credited; replays (same id) are not credited twice.
-      const gameId = resolveGameIdFromMatch(enrichedRecord);
-      if (gameId && appended.isNew) {
-        recordGuestTrialOrPersistCloudScore({
-          gameId,
-          tier: enrichedRecord.tier,
-          score: enrichedRecord.playerScore,
-          accuracyPercent: estimateMatchAccuracy(enrichedRecord),
-          dateKey: todayKey,
-          stats: buildMatchScoreStats(enrichedRecord),
-        });
-      }
-
-      if (qualifiesForDailyMilestone && !wasCompletedBefore) {
-        setConfettiTriggerKey((k) => k + 1);
-        playAchievementChime(profileRef.current.soundEnabled);
-      }
-
-      // Accumulate session metrics for End-of-Session reflection modal
-      const acc = sessionAccumulatorRef.current;
-      acc.matchesRecorded += 1;
-      if (record.arithmeticMeta) {
-        acc.problemsSolved += record.arithmeticMeta.solved;
-        acc.problemsAttempted += record.arithmeticMeta.attempted;
-      } else if (
-        record.gameTitle === 'Equation Foundry' ||
-        record.gameTitle === 'Odds & Urns'
-      ) {
-        acc.problemsSolved += record.solvedProblems ?? 0;
-        acc.problemsAttempted += 5;
-      } else {
-        acc.problemsSolved += record.result === 'win' ? 1 : 0;
-        acc.problemsAttempted += 1;
-      }
-
-      const evaluation = evaluateAchievements(
-        updatedMatches,
-        earnedBadgesRef.current,
-        dailyRef.current
-      );
-
-      if (evaluation.newlyUnlocked.length > 0) {
-        const newIds = evaluation.newlyUnlocked.map((b) => b.id);
-        const newTitles = evaluation.newlyUnlocked.map((b) => b.title);
-        acc.newlyEarnedSeals = Array.from(
-          new Set([...acc.newlyEarnedSeals, ...newTitles])
-        );
-        earnedBadgesRef.current = evaluation.earnedRecords;
-        setEarnedBadges(evaluation.earnedRecords);
-        setRecentlyUnlockedBadgeIds((prev) =>
-          Array.from(new Set([...prev, ...newIds]))
-        );
-        saveEarnedBadges(evaluation.earnedRecords);
-
-        setConfettiTriggerKey((k) => k + 1);
-        setLatestUnlockedSealTitle(evaluation.newlyUnlocked[0].title);
-        setMasteryUnlockEventKey((k) => k + 1);
-        playAchievementChime(profileRef.current.soundEnabled);
-
-        if (!profileRef.current.featuredBadgeId) {
-          const nextProfile: StudentProfile = {
-            ...profileRef.current,
-            featuredBadgeId: evaluation.newlyUnlocked[0].id,
-          };
-          profileRef.current = nextProfile;
-          setProfile(nextProfile);
-          saveProfile(nextProfile);
-        }
-      }
-
-      return evaluation.newlyUnlocked;
-    },
-    [recordGuestTrialOrPersistCloudScore]
-  );
-
-  const handleCompleteDaily = useCallback(
-    (completion: DailyChallengeCompletion): AchievementDefinition[] => {
-      const updatedDaily = upsertDailyCompletion(completion);
-      dailyRef.current = updatedDaily;
-      setDailyCompletions(updatedDaily);
-
-      const dailyMatch = buildDailyMatchRecord(completion);
-      const appended = tryAppendMatch(dailyMatch);
-      const updatedMatches = appended.matches;
-      matchesRef.current = updatedMatches;
-      setMatches(updatedMatches);
-      if (!appended.saved) {
-        console.warn('Numbercraft: could not save the daily result (browser storage is full or blocked).');
-      }
-
-      const attempts = Math.max(1, 3 + completion.mistakes);
-      const accuracyPercent = Math.round(
-        (completion.stepsSolved / attempts) * 100
-      );
-      // A replayed daily has the same match id: credit the trial / cloud score once.
-      if (appended.isNew) {
-        recordGuestTrialOrPersistCloudScore({
-          gameId: 'daily-challenge',
-          tier: completion.tier,
-          score: completion.score,
-          accuracyPercent,
-          dateKey: completion.dateKey,
-          stats: buildDailyScoreStats(completion),
-        });
-      }
-
-      const acc = sessionAccumulatorRef.current;
-      acc.matchesRecorded += 1;
-      acc.problemsSolved += completion.solved ? 3 : 0;
-      acc.problemsAttempted += 3 + completion.mistakes;
-
-      const evaluation = evaluateAchievements(
-        updatedMatches,
-        earnedBadgesRef.current,
-        updatedDaily
-      );
-
-      if (evaluation.newlyUnlocked.length > 0) {
-        const newIds = evaluation.newlyUnlocked.map((b) => b.id);
-        const newTitles = evaluation.newlyUnlocked.map((b) => b.title);
-        acc.newlyEarnedSeals = Array.from(
-          new Set([...acc.newlyEarnedSeals, ...newTitles])
-        );
-        earnedBadgesRef.current = evaluation.earnedRecords;
-        setEarnedBadges(evaluation.earnedRecords);
-        setRecentlyUnlockedBadgeIds((prev) =>
-          Array.from(new Set([...prev, ...newIds]))
-        );
-        saveEarnedBadges(evaluation.earnedRecords);
-        setLatestUnlockedSealTitle(evaluation.newlyUnlocked[0].title);
-        setMasteryUnlockEventKey((k) => k + 1);
-
-        if (!profileRef.current.featuredBadgeId) {
-          const nextProfile: StudentProfile = {
-            ...profileRef.current,
-            featuredBadgeId: evaluation.newlyUnlocked[0].id,
-          };
-          profileRef.current = nextProfile;
-          setProfile(nextProfile);
-          saveProfile(nextProfile);
-        }
-      }
-
-      if (completion.solved || evaluation.newlyUnlocked.length > 0) {
-        setConfettiTriggerKey((k) => k + 1);
-        playAchievementChime(profileRef.current.soundEnabled);
-      }
-
-      return evaluation.newlyUnlocked;
-    },
-    [recordGuestTrialOrPersistCloudScore]
-  );
-
-  const handleLoadSampleMatches = useCallback(() => {
-    setMatches((prev) => {
-      const realOnly = prev.filter((m) => !isSampleMatch(m));
-      const merged = [...realOnly, ...createSampleMatches()].sort(
-        (a, b) =>
-          new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime()
-      );
-      matchesRef.current = merged;
-      saveMatches(merged);
-      return merged;
-    });
-  }, []);
-
-  const handleClearSampleMatches = useCallback(() => {
-    setMatches((prev) => {
-      const realOnly = prev.filter((m) => !isSampleMatch(m));
-      matchesRef.current = realOnly;
-      saveMatches(realOnly);
-      return realOnly;
-    });
-    setDailyCompletions((prev) => {
-      const realDaily = prev.filter((c) => !isSampleDailyCompletion(c));
-      dailyRef.current = realDaily;
-      saveDailyCompletions(realDaily);
-      return realDaily;
-    });
-  }, []);
-
-  const handleLoadSampleDashboard = useCallback(() => {
-    const { sampleMatches, sampleDaily } = createSampleDashboardData();
-    setMatches((prev) => {
-      const realOnly = prev.filter((m) => !isSampleMatch(m));
-      const merged = [
-        ...realOnly,
-        ...createSampleMatches(),
-        ...sampleMatches,
-      ].sort(
-        (a, b) =>
-          new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime()
-      );
-      matchesRef.current = merged;
-      saveMatches(merged);
-      return merged;
-    });
-    setDailyCompletions((prev) => {
-      const realOnly = prev.filter((c) => !isSampleDailyCompletion(c));
-      const existingDates = new Set(realOnly.map((c) => c.dateKey));
-      const mergedDaily = [
-        ...realOnly,
-        ...sampleDaily.filter((c) => !existingDates.has(c.dateKey)),
-      ].sort((a, b) => (a.dateKey < b.dateKey ? 1 : -1));
-      dailyRef.current = mergedDaily;
-      saveDailyCompletions(mergedDaily);
-      return mergedDaily;
-    });
-  }, []);
-
-  const handleChangeDailyGoal = useCallback(
-    (nextGoal: number) => {
-      const clamped = clampDailyProblemGoal(nextGoal);
-      setProfile((prev) => {
-        const updated: StudentProfile = { ...prev, dailyProblemGoal: clamped };
-        profileRef.current = updated;
-        saveProfile(updated);
-        syncProfileToCloudIfSignedIn(updated);
-        return updated;
-      });
-    },
-    [syncProfileToCloudIfSignedIn]
-  );
+    if (gameId) void beginCloudRound(gameId, data.profileRef.current.ageTier);
+  }, [signedInUid, activeTab, activeArithmeticGame, data.profileRef]);
 
   return (
     <div className="paper-grid flex min-h-screen flex-col">
@@ -1005,11 +152,11 @@ export default function NumbercraftApp() {
         aria-atomic="true"
         className="sr-only"
       >
-        {tabAnnouncement}
+        {nav.tabAnnouncement}
       </div>
 
       {/* Canvas-based celebratory confetti overlay on badge unlock & daily solve */}
-      <ConfettiCelebration triggerKey={confettiTriggerKey} />
+      <ConfettiCelebration triggerKey={recording.confettiTriggerKey} />
 
       <div role="region" aria-label="Mastery progress">
       <MasteryProgressBar
@@ -1017,8 +164,8 @@ export default function NumbercraftApp() {
         totalCount={achievementEvaluation.totalCount}
         earnedHistory={earnedSealHistory}
         onOpenNotebook={() => requestNavigateTab('notebook')}
-        unlockEventKey={masteryUnlockEventKey}
-        latestUnlockedTitle={latestUnlockedSealTitle}
+        unlockEventKey={recording.masteryUnlockEventKey}
+        latestUnlockedTitle={recording.latestUnlockedSealTitle}
         isHydrated={hydrated}
       />
       </div>
@@ -1085,14 +232,11 @@ export default function NumbercraftApp() {
             )}
 
             {activeTab === 'daily' && (
-              <div
-                data-testid="game-container-daily"
-                role="group"
-                aria-label="Daily Math Challenge Interactive Game"
+              <GameArenaShell
+                testId="game-container-daily"
+                label="Daily Math Challenge Interactive Game"
+                announce="Daily Math Challenge Arena active."
               >
-                <span className="sr-only" aria-live="polite">
-                  Daily Math Challenge Arena active.
-                </span>
                 <DailyChallengeArena
                   ageTier={profile.ageTier}
                   onChangeTier={handleChangeTier}
@@ -1101,11 +245,11 @@ export default function NumbercraftApp() {
                   onToggleSound={handleToggleSound}
                   dailyCompletions={dailyCompletions}
                   achievementEvaluation={achievementEvaluation}
-                  onCompleteDaily={handleCompleteDaily}
+                  onCompleteDaily={recording.handleCompleteDaily}
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
                 />
-              </div>
+              </GameArenaShell>
             )}
 
             {activeTab === 'dashboard' && (
@@ -1114,26 +258,23 @@ export default function NumbercraftApp() {
                 matches={matches}
                 dailyCompletions={dailyCompletions}
                 achievementEvaluation={achievementEvaluation}
-                onChangeDailyGoal={handleChangeDailyGoal}
+                onChangeDailyGoal={profileActions.handleChangeDailyGoal}
                 onLaunchArithmetic={handleLaunchArithmetic}
-                onLaunchGame={handleLaunchAnyGame}
+                onLaunchGame={nav.handleLaunchAnyGame}
                 onOpenDaily={() => requestNavigateTab('daily')}
                 onOpenNotebook={() => requestNavigateTab('notebook')}
                 onOpenRegister={() => openRegistrationGate()}
-                onLoadSampleDashboard={handleLoadSampleDashboard}
-                onClearSampleDashboard={handleClearSampleMatches}
+                onLoadSampleDashboard={sampleData.handleLoadSampleDashboard}
+                onClearSampleDashboard={sampleData.handleClearSampleMatches}
               />
             )}
 
             {activeTab === 'play-arithmetic' && (
-              <div
-                data-testid="game-container-arithmetic"
-                role="group"
-                aria-label={activeTabA11y.regionLabel}
+              <GameArenaShell
+                testId="game-container-arithmetic"
+                label={activeTabA11y.regionLabel}
+                announce={`${activeTabA11y.regionLabel} active.`}
               >
-                <span className="sr-only" aria-live="polite">
-                  {activeTabA11y.regionLabel} active.
-                </span>
                 <ArithmeticArena
                   key={activeArithmeticGame}
                   initialGameId={activeArithmeticGame}
@@ -1144,24 +285,21 @@ export default function NumbercraftApp() {
                   onToggleSound={handleToggleSound}
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
-                  onRecordMatch={handleRecordMatch}
+                  onRecordMatch={recording.handleRecordMatch}
                   matches={matches}
                   isGameLockedForGuest={(gid) => guestLockedGames[gid]}
                   onRequireRegistration={(gid) => openRegistrationGate(gid)}
                 />
-              </div>
+              </GameArenaShell>
             )}
 
             {activeTab === 'play-factor-grid' &&
               (!autoStartParam || hydrated) && (
-                <div
-                  data-testid="game-container-factor-grid"
-                  role="group"
-                  aria-label="Factor Grid Strategy Interactive Game"
+                <GameArenaShell
+                  testId="game-container-factor-grid"
+                  label="Factor Grid Strategy Interactive Game"
+                  announce="Factor Grid Strategy Game Arena active."
                 >
-                  <span className="sr-only" aria-live="polite">
-                    Factor Grid Strategy Game Arena active.
-                  </span>
                   <FactorGridPrototype
                     ageTier={profile.ageTier}
                     onChangeTier={handleChangeTier}
@@ -1171,25 +309,22 @@ export default function NumbercraftApp() {
                     onBackToStudio={() => requestNavigateTab('studio')}
                     onOpenRooms={() => requestNavigateTab('rooms')}
                     onOpenNotebook={() => requestNavigateTab('notebook')}
-                    onRecordMatch={handleRecordMatch}
+                    onRecordMatch={recording.handleRecordMatch}
                     autoStart={autoStartParam}
                     guestTrialLocked={guestLockedGames['factor-grid']}
                     onRequireRegistration={() =>
                       openRegistrationGate('factor-grid')
                     }
                   />
-                </div>
+                </GameArenaShell>
               )}
 
             {activeTab === 'play-equation-foundry' && (
-              <div
-                data-testid="game-container-equation-foundry"
-                role="group"
-                aria-label="Equation Foundry Expression Interactive Game"
+              <GameArenaShell
+                testId="game-container-equation-foundry"
+                label="Equation Foundry Expression Interactive Game"
+                announce="Equation Foundry Expression Game Arena active."
               >
-                <span className="sr-only" aria-live="polite">
-                  Equation Foundry Expression Game Arena active.
-                </span>
                 <EquationFoundryArena
                   ageTier={profile.ageTier}
                   onChangeTier={handleChangeTier}
@@ -1198,24 +333,21 @@ export default function NumbercraftApp() {
                   onToggleSound={handleToggleSound}
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
-                  onRecordMatch={handleRecordMatch}
+                  onRecordMatch={recording.handleRecordMatch}
                   guestTrialLocked={guestLockedGames['equation-foundry']}
                   onRequireRegistration={() =>
                     openRegistrationGate('equation-foundry')
                   }
                 />
-              </div>
+              </GameArenaShell>
             )}
 
             {activeTab === 'play-odds-urns' && (
-              <div
-                data-testid="game-container-odds-urns"
-                role="group"
-                aria-label="Odds and Urns Modular Probability Interactive Game"
+              <GameArenaShell
+                testId="game-container-odds-urns"
+                label="Odds and Urns Modular Probability Interactive Game"
+                announce="Odds and Urns Probability Game Arena active."
               >
-                <span className="sr-only" aria-live="polite">
-                  Odds and Urns Probability Game Arena active.
-                </span>
                 <OddsUrnsArena
                   ageTier={profile.ageTier}
                   onChangeTier={handleChangeTier}
@@ -1224,13 +356,13 @@ export default function NumbercraftApp() {
                   onToggleSound={handleToggleSound}
                   onBackToStudio={() => requestNavigateTab('studio')}
                   onOpenNotebook={() => requestNavigateTab('notebook')}
-                  onRecordMatch={handleRecordMatch}
+                  onRecordMatch={recording.handleRecordMatch}
                   guestTrialLocked={guestLockedGames['odds-urns']}
                   onRequireRegistration={() =>
                     openRegistrationGate('odds-urns')
                   }
                 />
-              </div>
+              </GameArenaShell>
             )}
 
             {activeTab === 'rooms' && (
@@ -1251,10 +383,10 @@ export default function NumbercraftApp() {
                 profile={profile}
                 matches={matches}
                 achievementEvaluation={achievementEvaluation}
-                onSelectFeaturedBadge={handleSelectFeaturedBadge}
+                onSelectFeaturedBadge={profileActions.handleSelectFeaturedBadge}
                 onPlayFactorGrid={() => requestNavigateTab('play-factor-grid')}
-                onLoadSampleMatches={handleLoadSampleMatches}
-                onClearSampleMatches={handleClearSampleMatches}
+                onLoadSampleMatches={sampleData.handleLoadSampleMatches}
+                onClearSampleMatches={sampleData.handleClearSampleMatches}
               />
             )}
 
@@ -1289,28 +421,27 @@ export default function NumbercraftApp() {
         destinationLabel={
           pendingLeaveTab ? TAB_DEST_LABELS[pendingLeaveTab] : 'Games Studio'
         }
-        onConfirmLeave={handleConfirmLeaveArena}
-        onStayInArena={handleStayInArena}
+        onConfirmLeave={nav.handleConfirmLeaveArena}
+        onStayInArena={nav.handleStayInArena}
       />
 
       <AccountModal
-        open={accountOpen}
+        open={account.accountOpen}
         onClose={() => {
-          setAccountOpen(false);
-          setRegistrationGateGameTitle(null);
-          setRecentlyUnlockedBadgeIds([]);
+          account.closeAccountModal();
+          recording.setRecentlyUnlockedBadgeIds([]);
         }}
-        initialSection={accountInitialSection}
-        initialAuthMode={accountInitialAuthMode}
-        registrationGateGameTitle={registrationGateGameTitle}
+        initialSection={account.accountInitialSection}
+        initialAuthMode={account.accountInitialAuthMode}
+        registrationGateGameTitle={account.registrationGateGameTitle}
         profile={profile}
         matchCount={matches.length}
         achievementEvaluation={achievementEvaluation}
-        recentlyUnlockedBadgeIds={recentlyUnlockedBadgeIds}
+        recentlyUnlockedBadgeIds={recording.recentlyUnlockedBadgeIds}
         themePreference={themePreference}
         onChangeTheme={handleChangeTheme}
-        onUpdateProfile={handleUpdateProfile}
-        onClearLocalProgress={handleClearLocalProgress}
+        onUpdateProfile={profileActions.handleUpdateProfile}
+        onClearLocalProgress={sampleData.handleClearLocalProgress}
         onOpenNotebook={() => requestNavigateTab('notebook')}
       />
     </div>
