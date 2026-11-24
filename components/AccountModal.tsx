@@ -524,7 +524,15 @@ function AccountModalBody({
       aria-labelledby="account-modal-title"
       data-testid="account-modal"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target !== e.currentTarget) return;
+        // A stray backdrop click must not silently throw away typed text.
+        const typed =
+          passwordInput !== '' ||
+          deletePassword !== '' ||
+          emailInput !== (profile.email ?? '') ||
+          nameInput !== profile.displayName ||
+          signupName !== (profile.displayName === 'Guest Explorer' ? '' : profile.displayName);
+        if (!typed || window.confirm('Discard what you typed and close?')) onClose();
       }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#1C232B]/45 p-4"
     >
