@@ -13,12 +13,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ArrowRight, CheckCircle2, Database } from 'lucide-react';
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import type {
   DailyGoalCompletionRate30DayData,
   DailyGoalRateDayPoint,
   DailyGoalRatePeriodBucket,
 } from '@/lib/performance-dashboard';
+import SampleDailyActions from './dashboard/SampleDailyActions';
 
 interface DailyGoalCompletionRateChartProps {
   data: DailyGoalCompletionRate30DayData;
@@ -454,26 +455,12 @@ export default function DailyGoalCompletionRateChart({
             Complete Daily Math Challenges to measure your 30-day Daily Goal
             Completion Rate and 7-day rolling consistency.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            {!hasSampleData && (
-              <button
-                type="button"
-                onClick={onLoadSampleDashboard}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#D8D1C4] bg-white px-3 py-1.5 text-xs font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] whitespace-nowrap shrink-0"
-              >
-                <Database className="h-3.5 w-3.5" aria-hidden="true" />
-                Load Sample Progress
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onOpenDaily}
-              className="btn-cobalt inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0"
-            >
-              Start Daily Challenge
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </div>
+          <SampleDailyActions
+            className="flex flex-wrap items-center gap-2"
+            hasSampleData={hasSampleData}
+            onLoadSampleDashboard={onLoadSampleDashboard}
+            onOpenDaily={onOpenDaily}
+          />
         </div>
       )}
     </section>
