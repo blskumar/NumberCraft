@@ -18,8 +18,8 @@ export default function FactorGridBoardZone({ r }: { r: FactorGridCtx }) {
           aria-label="Factor Grid interactive board"
           className="card-tactile rounded-2xl p-4 sm:p-6 lg:col-span-8"
         >
-          {/* Live Preview & Turn Bar */}
-          <div className="mb-5 flex min-h-[50px] flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E5E0D5] bg-[#FAF8F4] px-4 py-2.5 text-sm">
+          {/* Live Preview & Turn Bar. Reserved height: the preview wraps to 2-3 lines on narrow boards; a variable height made the grid jump under the pointer. */}
+          <div className="mb-5 flex min-h-[122px] sm:min-h-[100px] xl:min-h-[68px] flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E5E0D5] bg-[#FAF8F4] px-4 py-2.5 text-sm">
             {activePreview ? (
               activePreview.legal ? (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs sm:text-sm tabular-nums">
