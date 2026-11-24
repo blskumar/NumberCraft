@@ -606,3 +606,7 @@ body {
 html[data-theme="dark"] [style*="color: rgb(29, 78, 216)"] { color: #60A5FA !important; }
 html[data-theme="dark"] [style*="color: rgb(4, 120, 87)"] { color: #34D399 !important; }
 html[data-theme="dark"] [style*="color: rgb(180, 83, 9)"] { color: #FBBF24 !important; }
+/* SSR serialises inline styles as "color:#RRGGBB" (no normalisation to rgb()) until the DOM is rewritten. */
+html[data-theme="dark"] [style*="color:#1D4ED8" i] { color: #60A5FA !important; }
+html[data-theme="dark"] [style*="color:#047857" i] { color: #34D399 !important; }
+html[data-theme="dark"] [style*="color:#B45309" i] { color: #FBBF24 !important; }
