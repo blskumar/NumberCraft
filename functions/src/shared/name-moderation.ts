@@ -4,6 +4,7 @@
 // than the data list, no DOM/Node APIs.
 import {
   CONFUSABLES,
+  NAME_ALLOWLIST,
   PROFANITY_EXACT,
   PROFANITY_PREFIX,
   PROFANITY_SUBSTRING,
@@ -75,6 +76,8 @@ const PRE = PROFANITY_PREFIX.map(normalise);
 const EXA = PROFANITY_EXACT.map(normalise);
 const RES_SUB = RESERVED_SUBSTRING.map(normalise);
 const RES_EXA = RESERVED_EXACT.map(normalise);
+
+const ALLOW = new Set(NAME_ALLOWLIST);
 
 const hasRepeat = (w: string): boolean => /(.)\1/u.test(w);
 /** Cap runs of the same character at `n` ("fuuuck" -> "fuuck" for n=2). */
@@ -220,8 +223,13 @@ export function validateDisplayName(name: unknown): NameValidation {
   if (looksLikePii(clean)) return fail('pii');
   if (!ALLOWED.test(clean)) return fail('charset');
 
-  const views = buildViews(clean);
-  if (matchesList(views, RES_SUB, [], RES_EXA)) return fail('reserved');
+  // Whole allowlisted words (exactly as typed) are not profanity; reserved
+  // words are still checked against the full name.
+  const reservedViews = buildViews(clean);
+  const views = buildViews(
+    clean.replace(/[\p{L}\p{M}]+/gu, (t) => (ALLOW.has(t.toLowerCase()) ? ' ' : t))
+  );
+  if (matchesList(reservedViews, RES_SUB, [], RES_EXA)) return fail('reserved');
   if (matchesList(views, SUB, PRE, EXA)) return fail('inappropriate');
   return { ok: true, reason: null, clean, suggestion };
 }

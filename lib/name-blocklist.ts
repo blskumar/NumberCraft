@@ -11,11 +11,25 @@
 // Short or ambiguous words are EXACT only, so "Classic", "Assassin",
 // "Scunthorpe", "Hancock", "Titan", "Chutney", "Gandhi", "Brandi" pass.
 //
-// Deliberate decisions: "Dick", "Lund", "Randi", "Paki" are exact-blocked
-// (real names/surnames exist but they are common slurs/slang aimed at
-// children; users can pick another name). "Badass"/"Killer" style gamer names
+// Deliberate decisions: "Randi", "Paki" are exact-blocked (real names exist but
+// they are common slurs aimed at children; users can pick another name).
+// "Dick", "Lund" (real given name / surname) and the food/animal words in
+// NAME_ALLOWLIST pass when they stand alone as a whole word exactly as typed;
+// obfuscated or extended forms ("d1ck", "dickhead", "lunds") stay blocked. "Badass"/"Killer" style gamer names
 // are blocked/allowed per the lists below. Not exhaustive: this is a first line
 // of defence, not a substitute for report/moderation tooling.
+
+/**
+ * Whole words (lowercase, as typed: no leetspeak or letter-repeat folding) that
+ * the folded matchers would otherwise block by accident. Removed from the name
+ * before matching, so "Dick Smith" and "Shiitake" pass but "d1ck" does not.
+ */
+export const NAME_ALLOWLIST: readonly string[] = [
+  'dick',
+  'lund',
+  'shiitake',
+  'pussycat',
+];
 
 /** Impersonation / authority words. Substring-matched when squashed. */
 export const RESERVED_SUBSTRING: readonly string[] = [

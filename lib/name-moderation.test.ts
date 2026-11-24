@@ -84,16 +84,21 @@ test('profanity: english', () => {
     'fuck', 'FUCK', 'fuuuck', 'f u c k', 'f.u.c.k', 'f_u_c_k', 'fvck'.replace('v', 'u'), 'xxfuckxx',
     'sh1t', 'shit', 'shithead', 'b1tch', 'bitch', 'Bitches', 'A55', 'ass', 'Big Ass',
     'asshole', 'dumbass', 'badass', 'p0rn', 'porn', 'PornStar', 'sex', 'Sexy Boy', 'nigga',
-    'n1gger', 'faggot', 'cunt', 'c u n t', 'whore', 'slut', 'pussy', 'pusssy', 'dick', 'dicks',
+    'n1gger', 'faggot', 'cunt', 'c u n t', 'whore', 'slut', 'pussy', 'pusssy', 'dicks', 'dickhead', 'd1ck',
     'penis', 'idiot', 'stupid', 'kill', 'rape', 'rapist', 'kys', 'hitler', 'nazi', 'terrorist',
     'retarded', 'suicide', 'murderer', 'boobs', 'tits',
   ]) bad(n, 'inappropriate');
 });
 
+test('allowlisted whole words pass as typed (Dick, Lund, Shiitake, Pussycat); obfuscated or extended forms still fail', () => {
+  for (const n of ['Dick', 'DICK', 'Dick Smith', 'Moby Dick', 'Lund', 'Anna Lund', 'Shiitake', 'Shiitake Fan', 'Pussycat', 'Pussycat Dolls']) ok(n);
+  for (const n of ['d1ck', 'dicks', 'dickhead', 'Pussy', 'Pussy Cat', 'p u s s y', 'Shit', 'Shiitake Shit', 'lunds', 'l u n d s']) bad(n, 'inappropriate');
+});
+
 test('profanity: Hinglish and Indian-language transliterations', () => {
   for (const n of [
     'chutiya', 'Chut1ya', 'madarchod', 'm@darchod'.replace('@', 'a'), 'bhenchod', 'behenchod',
-    'bhosdike', 'gandu', 'gaandu', 'harami', 'haramzada', 'randwa', 'lund', 'chut', 'saala',
+    'bhosdike', 'gandu', 'gaandu', 'harami', 'haramzada', 'randwa', 'lunds', 'l u n d s', 'chut', 'saala',
     'kutta', 'bakchod', 'bsdk', 'bkl', 'thevidiya', 'punda', 'pundai', 'koothi', 'otha',
     'lanjakodaka', 'bokachoda', 'thayoli', 'zavadya', 'kamina', 'lauda',
   ]) bad(n, 'inappropriate');
@@ -124,7 +129,9 @@ test('fallback suggestion is safe, deterministic per seed and well formed', () =
 
 test('every blocklist entry blocks itself (and not as a false-positive source)', async () => {
   const bl = await import('./name-blocklist');
+  const allowed = new Set(bl.NAME_ALLOWLIST);
   for (const w of [...bl.PROFANITY_SUBSTRING, ...bl.PROFANITY_PREFIX, ...bl.PROFANITY_EXACT]) {
+    if (allowed.has(w)) continue; // deliberately passes as a whole word, see the allowlist test
     const r = validateDisplayName(w);
     assert.equal(r.ok, false, `entry should block itself: ${w}`);
   }
