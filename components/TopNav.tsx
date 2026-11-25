@@ -190,7 +190,7 @@ export default function TopNav({
               ) : (
                 <User className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               )}
-              <span className="max-w-[88px] sm:max-w-[180px] truncate">
+              <span className="max-w-[72px] sm:max-w-[180px] truncate">
                 {accountLabel}
               </span>
               <span className="sr-only"> (open student profile and mastery seals)</span>
