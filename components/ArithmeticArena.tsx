@@ -10,7 +10,7 @@ import { useArithmeticArena, type ArithmeticArenaProps } from './arena/useArithm
 export default function ArithmeticArena(props: ArithmeticArenaProps) {
   const r = useArithmeticArena(props);
   const {
-    activeSpec, gameId, onBackToStudio, phase, problem, setGameId, setPhase,
+    activeSpec, finalizeRound, gameId, onBackToStudio, phase, problem, setGameId, setPhase,
     tierSpec,
   } = r;
   return (
@@ -51,6 +51,8 @@ export default function ArithmeticArena(props: ArithmeticArenaProps) {
                 type="button"
                 aria-pressed={active}
                 onClick={() => {
+                  // Switching mid-round keeps the answered questions (same as Finish).
+                  if (phase === 'playing') finalizeRound();
                   setGameId(id);
                   setPhase('setup');
                 }}
