@@ -451,7 +451,8 @@ export function generateArithmeticProblem(
           // Warm-Up: gentle no-borrow subtraction
           const a = randInt(7, 18, rng);
           const ones = a % 10;
-          const b = ones >= 2 ? randInt(1, ones, rng) : randInt(1, a - 2, rng);
+          // keep the difference strictly positive (a=7..9 would otherwise allow b===a)
+          const b = ones >= 2 ? randInt(1, Math.min(ones, a - 1), rng) : randInt(1, a - 2, rng);
           left = a;
           right = b;
           stageLabel = 'Adaptive Lv 1 · Gentle Differences';

@@ -3,6 +3,8 @@
 import {
   Award,
   CalendarCheck,
+  CalendarHeart,
+  CalendarRange,
   Compass,
   Crown,
   Flame,
@@ -101,6 +103,10 @@ function SealGlyph({
       return <Sparkles className={className} aria-hidden="true" />;
     case 'daily-streak-3':
       return <CalendarCheck className={className} aria-hidden="true" />;
+    case 'daily-streak-7':
+      return <CalendarRange className={className} aria-hidden="true" />;
+    case 'daily-streak-14':
+      return <CalendarHeart className={className} aria-hidden="true" />;
   }
 }
 

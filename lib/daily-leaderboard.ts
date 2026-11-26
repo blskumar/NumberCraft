@@ -28,6 +28,8 @@ export interface DailyLeaderboardEntry {
   streakDays: number;
   flawless: boolean;
   isCurrentUser: boolean;
+  /** True for the generated practice-cohort peers (not real children); UI must label them. */
+  isSimulated: boolean;
 }
 
 export interface DailyLeaderboardSnapshot {
@@ -170,6 +172,7 @@ export function buildDailyLeaderboard(params: {
         streakDays,
         flawless: mistakes === 0 && hintsUsed === 0,
         isCurrentUser: false,
+        isSimulated: true,
       };
     });
 
@@ -204,6 +207,7 @@ export function buildDailyLeaderboard(params: {
       streakDays: todayCompletion.streakDays ?? 1,
       flawless: todayCompletion.mistakes === 0 && todayCompletion.hintsUsed === 0,
       isCurrentUser: true,
+      isSimulated: false,
     });
   }
 

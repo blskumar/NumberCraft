@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useModalFocus } from '@/components/useModalFocus';
 import { motion } from 'motion/react';
 import {
   ArrowRight,
@@ -31,21 +31,13 @@ export default function EndOfSessionModal({
   onConfirmLeave,
   onStayInArena,
 }: EndOfSessionModalProps) {
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onStayInArena();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onStayInArena]);
+  const dialogRef = useModalFocus<HTMLDivElement>(open && !!summary, onStayInArena);
 
   if (!open || !summary) return null;
 
   return (
     <div
+      ref={dialogRef}
       data-testid="end-of-session-modal"
       role="dialog"
       aria-modal="true"

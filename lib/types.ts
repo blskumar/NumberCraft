@@ -8,7 +8,7 @@ export type FactorVariant = 'classic' | 'prime-trap';
 
 export type TileOwner = 'unclaimed' | 'p1' | 'p2';
 
-export type NumberKind = 'unit' | 'prime' | 'deficient' | 'perfect' | 'abundant';
+export type NumberKind = 'unit' | 'prime' | 'deficient' | 'perfect' | 'abundant' | 'invalid';
 
 export interface TierSpec {
   id: AgeTier;
@@ -123,6 +123,8 @@ export interface DailyChallengeCompletion {
   streakDays?: number;
   streakBonus?: number;
   completedAt: string;
+  /** Explicit marker for generated demo data (never inferred from timestamps). */
+  isSample?: boolean;
 }
 
 export interface DailyMatchMeta {
@@ -152,6 +154,10 @@ export interface MatchRecord {
   arithmeticMeta?: ArithmeticMatchMeta;
   dailyMeta?: DailyMatchMeta;
   dailyMilestoneMultiplier?: number;
+  /** Set when recorded while signed in (those rounds do not use up the guest trial). */
+  signedIn?: boolean;
+  /** Real problems solved (Equation Foundry / Odds & Urns); drives goal credit. */
+  solvedProblems?: number;
 }
 
 export type AchievementId =
@@ -166,7 +172,9 @@ export type AchievementId =
   | 'daily-pioneer'
   | 'daily-lightning'
   | 'daily-flawless'
-  | 'daily-streak-3';
+  | 'daily-streak-3'
+  | 'daily-streak-7'
+  | 'daily-streak-14';
 
 export type AchievementAccent = 'cobalt' | 'emerald' | 'ochre';
 

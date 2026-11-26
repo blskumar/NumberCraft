@@ -19,7 +19,7 @@ describe('Firestore Security Rules & Blueprint Verification (firestore.rules)', 
     assert.ok(rulesText.includes('allow read, write: if false;'));
   });
 
-  it('covers every collection declared in firebase-blueprint.json with strict PII isolation and immutability', () => {
+  it('covers every collection declared in firebase-blueprint.json with owner-only profiles and raise-only scores', () => {
     assert.ok('/users/{userId}' in blueprint.firestore);
     assert.ok('/gameScores/{scoreId}' in blueprint.firestore);
 
@@ -31,12 +31,16 @@ describe('Firestore Security Rules & Blueprint Verification (firestore.rules)', 
     assert.ok(rulesText.includes('incoming().createdAt == existing().createdAt'));
     assert.ok(rulesText.includes('incoming().updatedAt == request.time'));
 
-    // Immutable zero-PII game scores on /gameScores/{scoreId}
+    // Signed-in reads; scores/rounds/flags are written only by Cloud Functions
     assert.ok(rulesText.includes('match /gameScores/{scoreId}'));
-    assert.ok(rulesText.includes('allow update: if false;'));
-    assert.ok(rulesText.includes("existing().visibility == 'public'"));
-    assert.ok(rulesText.includes('isValidGameScore(incoming())'));
-    assert.ok(rulesText.includes('data.score <= 100000'));
+    assert.ok(rulesText.includes('allow get, list: if isSignedIn();'));
+    assert.ok(rulesText.includes('allow create, update, delete: if false;'));
+    assert.ok(!rulesText.includes("visibility == 'public'"));
+    for (const c of ['rounds/{roundId}', 'scoreFlags/{flagId}', 'rateLimits/{uid}']) {
+      assert.ok(rulesText.includes(`match /${c}`), c);
+    }
+    assert.ok(rulesText.includes('isAcceptableDisplayName(data.displayName)'));
+    assert.ok(rulesText.includes('data.email == request.auth.token.email'));
     assert.ok(rulesText.includes('data.uid == request.auth.uid'));
   });
 
@@ -46,14 +50,6 @@ describe('Firestore Security Rules & Blueprint Verification (firestore.rules)', 
       assert.ok(
         rulesText.includes(`'${key}'`),
         `Expected UserProfileDoc key '${key}' enforced in firestore.rules`
-      );
-    }
-
-    const scoreRequired = blueprint.entities.GameScoreDoc.required ?? [];
-    for (const key of scoreRequired) {
-      assert.ok(
-        rulesText.includes(`'${key}'`),
-        `Expected GameScoreDoc key '${key}' enforced in firestore.rules`
       );
     }
   });

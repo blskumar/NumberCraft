@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./dark-theme.generated.css";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
@@ -502,3 +503,110 @@ html[data-theme="dark"] .mastery-bar-unlock-glow {
     transform: none !important;
   }
 }
+
+/* SVG chart gridlines/tracks that are pale in light mode */
+html[data-theme="dark"] svg [stroke="#E8E2D6"],
+html[data-theme="dark"] svg [stroke="#ECE7DD"],
+html[data-theme="dark"] svg [stroke="#D8D1C4"] {
+  stroke: #2B3748;
+}
+
+html[data-theme="dark"] svg [fill="#FFFFFF"] {
+  fill: #1A2430;
+}
+
+/* Visually hidden but available to assistive tech (chart data tables) */
+.sr-only-data {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skeleton pulses respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Touch targets: >=44px for primary controls on coarse pointers, >=24px everywhere (WCAG 2.5.8) */
+@media (pointer: coarse) {
+  header button,
+  nav[aria-label="Mobile navigation"] button,
+  [role="dialog"] button,
+  [role="dialog"] a,
+  main button,
+  [data-testid="studio-active-region"] button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+button,
+[role="button"],
+[role="tab"],
+a[href],
+select,
+input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]) {
+  min-height: 24px;
+}
+button,
+[role="tab"] {
+  min-width: 24px;
+}
+
+/* Narrow screens / 200% root font size: let content wrap instead of overflowing */
+html,
+body {
+  overflow-wrap: break-word;
+}
+
+@media print {
+  header,
+  nav,
+  footer,
+  [role="dialog"],
+  [role="timer"],
+  [role="status"][aria-live],
+  button {
+    display: none !important;
+  }
+  html,
+  html[data-theme="dark"],
+  body,
+  html[data-theme="dark"] body,
+  .paper-grid,
+  html[data-theme="dark"] .paper-grid {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .card-tactile,
+  html[data-theme="dark"] .card-tactile {
+    background: #fff !important;
+    color: #000 !important;
+    border: 1px solid #999 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+}
+
+/* Inline accent colours (tier badges etc.) cannot be reached by class rules */
+html[data-theme="dark"] [style*="color: rgb(29, 78, 216)"] { color: #60A5FA !important; }
+html[data-theme="dark"] [style*="color: rgb(4, 120, 87)"] { color: #34D399 !important; }
+html[data-theme="dark"] [style*="color: rgb(180, 83, 9)"] { color: #FBBF24 !important; }
+/* SSR serialises inline styles as "color:#RRGGBB" (no normalisation to rgb()) until the DOM is rewritten. */
+html[data-theme="dark"] [style*="color:#1D4ED8" i] { color: #60A5FA !important; }
+html[data-theme="dark"] [style*="color:#047857" i] { color: #34D399 !important; }
+html[data-theme="dark"] [style*="color:#B45309" i] { color: #FBBF24 !important; }

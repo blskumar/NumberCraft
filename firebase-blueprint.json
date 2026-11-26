@@ -27,7 +27,11 @@
         },
         "ageTier": {
           "type": "string",
-          "enum": ["explorers", "challengers", "strategists"],
+          "enum": [
+            "explorers",
+            "challengers",
+            "strategists"
+          ],
           "description": "Preferred adaptive difficulty tier."
         },
         "dailyProblemGoal": {
@@ -57,7 +61,7 @@
     },
     "GameScoreDoc": {
       "title": "GameScoreDoc",
-      "description": "Immutable per-game score record submitted by a signed-in player for Top 10 Daily and Weekly Leaderboards (contains zero PII).",
+      "description": "Per-user, per-game, per-day best score used for the Daily and Weekly leaderboards. Readable by any signed-in user. NOT zero-PII: exposes uid, displayName and age tier. Doc id is {uid}_{gameId}_{dateKey}; week is derived client-side from dateKey.",
       "type": "object",
       "properties": {
         "uid": {
@@ -65,13 +69,13 @@
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "description": "Firebase Auth UID of the player who earned this score."
+          "description": "Firebase Auth UID of the player (visible to all signed-in users)."
         },
         "displayName": {
           "type": "string",
           "minLength": 1,
           "maxLength": 28,
-          "description": "Public player display name at the time of the match."
+          "description": "Public display name; must equal users/{uid}.displayName."
         },
         "gameId": {
           "type": "string",
@@ -94,8 +98,12 @@
         },
         "tier": {
           "type": "string",
-          "enum": ["explorers", "challengers", "strategists"],
-          "description": "Adaptive age tier played during the match."
+          "enum": [
+            "explorers",
+            "challengers",
+            "strategists"
+          ],
+          "description": "Age tier played (visible to all signed-in users)."
         },
         "score": {
           "type": "integer",
@@ -110,24 +118,12 @@
           "minLength": 10,
           "maxLength": 10,
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-          "description": "Local calendar date key (YYYY-MM-DD) for Top 10 Daily Leaderboards."
-        },
-        "weekKey": {
-          "type": "string",
-          "minLength": 8,
-          "maxLength": 8,
-          "pattern": "^[0-9]{4}-W[0-9]{2}$",
-          "description": "ISO week key (YYYY-Www) for Top 10 Weekly Leaderboards."
-        },
-        "visibility": {
-          "type": "string",
-          "enum": ["public"],
-          "description": "Explicit leaderboard visibility marker enforced by Firestore list rules."
+          "description": "Local calendar date (YYYY-MM-DD); must be within server UTC day +/-1."
         },
         "createdAt": {
           "type": "string",
           "format": "date-time",
-          "description": "Server timestamp when the score was recorded."
+          "description": "Server time of the latest raise of this best score."
         }
       },
       "required": [
@@ -139,8 +135,6 @@
         "score",
         "accuracyPercent",
         "dateKey",
-        "weekKey",
-        "visibility",
         "createdAt"
       ]
     }
@@ -156,7 +150,7 @@
       "schema": {
         "$ref": "#/entities/GameScoreDoc"
       },
-      "description": "Immutable per-game score submissions used to power Top 10 Daily and Top 10 Weekly Leaderboards across signed-in players."
+      "description": "Best-of-day score per user/game. Signed-in read; create/raise only by an email-verified owner; owner delete for erasure."
     }
   }
 }

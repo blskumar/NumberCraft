@@ -1,5 +1,6 @@
 'use client';
 
+import ChartA11y from '@/components/ChartA11y';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid,
@@ -15,7 +16,6 @@ import {
 import {
   ArrowRight,
   Award,
-  Database,
   Flame,
   Sparkles,
   Trophy,
@@ -28,6 +28,7 @@ import {
   type StreakGrowthTriggerSnapshot,
 } from '@/lib/performance-dashboard';
 import type { DailyChallengeCompletion } from '@/lib/types';
+import SampleDailyActions from './dashboard/SampleDailyActions';
 
 interface DailyStreakTrendChartProps {
   dailyCompletions: DailyChallengeCompletion[];
@@ -544,6 +545,7 @@ export default function DailyStreakTrendChart({
         key={`chart-canvas-${growthPulseKey}`}
         className="streak-chart-canvas mt-4 h-[260px] w-full"
       >
+              <ChartA11y label="Daily streak trend" data={trendData.points as never} />
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={trendData.points}
@@ -708,26 +710,12 @@ export default function DailyStreakTrendChart({
             Solve Daily Math Challenges on consecutive days to chart your streak
             climb and stamp Mastery Milestone diamonds at 3d, 7d, 14d, and 30d.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            {!hasSampleData && (
-              <button
-                type="button"
-                onClick={onLoadSampleDashboard}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#D8D1C4] bg-white px-3 py-1.5 text-xs font-semibold text-[#1C232B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] whitespace-nowrap shrink-0"
-              >
-                <Database className="h-3.5 w-3.5" aria-hidden="true" />
-                Load Sample Progress
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onOpenDaily}
-              className="btn-cobalt inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0"
-            >
-              Start Daily Challenge
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </div>
+          <SampleDailyActions
+            className="flex flex-wrap items-center gap-2"
+            hasSampleData={hasSampleData}
+            onLoadSampleDashboard={onLoadSampleDashboard}
+            onOpenDaily={onOpenDaily}
+          />
         </div>
       )}
     </section>

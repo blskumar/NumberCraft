@@ -73,6 +73,7 @@ export const ADAPTIVE_BANDS: Record<AdaptiveLevel, AdaptiveBandMeta> = {
 };
 
 export function clampAdaptiveLevel(value: number): AdaptiveLevel {
+  if (Number.isNaN(value)) return 1;
   const rounded = Math.round(value);
   if (rounded <= 1) return 1;
   if (rounded >= 5) return 5;
@@ -142,7 +143,7 @@ export function computeHistoricalCalibration(
   const latestEndLevel = relevant[0].arithmeticMeta?.endAdaptiveLevel;
 
   // Base level from recent accuracy + pace + prior ending level
-  let computed = latestEndLevel ?? (gameId === 'multiplication-mastery' ? 2 : 2);
+  let computed = latestEndLevel ?? 2;
 
   if (avgAccuracyPercent >= 92 && avgSolvedPerMinute >= 14) {
     computed = Math.max(computed, 4);

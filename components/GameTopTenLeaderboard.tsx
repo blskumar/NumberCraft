@@ -79,17 +79,20 @@ export default function GameTopTenLeaderboard({
     const unsubscribe = subscribeToPeriodGameScores({
       period,
       todayKey,
+      signedIn: isSignedIn,
       onUpdate: (nextRecords) => {
         window.clearTimeout(startTimer);
         setRecords(nextRecords);
         setLoading(false);
         setLoadError(null);
       },
-      onError: () => {
+      onError: (message) => {
         window.clearTimeout(startTimer);
         setLoading(false);
         setLoadError(
-          'Live cloud scores are temporarily unavailable. Scores will appear once connected.'
+          isSignedIn
+            ? 'Live cloud scores are temporarily unavailable. Scores will appear once connected.'
+            : message
         );
       },
     });
@@ -98,7 +101,7 @@ export default function GameTopTenLeaderboard({
       window.clearTimeout(startTimer);
       unsubscribe();
     };
-  }, [period, todayKey]);
+  }, [period, todayKey, isSignedIn]);
 
   const board = useMemo(
     () =>
@@ -150,7 +153,7 @@ export default function GameTopTenLeaderboard({
         <div
           role="tablist"
           aria-label="Leaderboard time period"
-          className="inline-flex items-center gap-1 self-start rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1 lg:self-auto"
+          className="inline-flex max-w-full flex-wrap items-center gap-1 self-start rounded-xl border border-[#DFD8CA] bg-[#EFECE3] p-1 lg:self-auto"
         >
           <button
             type="button"
@@ -330,7 +333,7 @@ export default function GameTopTenLeaderboard({
           </div>
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Scrollable table">
           <table className="w-full min-w-[580px] border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-[#ECE7DD] text-[11px] font-semibold text-[#5A6572]">

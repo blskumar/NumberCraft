@@ -1,0 +1,22 @@
+{
+  "firestore": {
+    "database": "ai-studio-eb2d7427-0e3d-4e1f-ae8f-1222697a9655",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": ["node_modules", ".git", "*.local", "**/*.test.*"],
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
+    }
+  ],
+  "emulators": {
+    "auth": { "port": 9099 },
+    "functions": { "port": 5001 },
+    "firestore": { "port": 8091 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}

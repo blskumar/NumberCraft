@@ -1,38 +1,12 @@
 'use client';
 
-import { getApps, initializeApp, type FirebaseApp } from 'firebase/app';
-import {
-  browserLocalPersistence,
-  browserSessionPersistence,
-  createUserWithEmailAndPassword,
-  getAuth,
-  onAuthStateChanged,
-  sendPasswordResetEmail,
-  setPersistence,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
-  type Auth,
-  type User,
-} from 'firebase/auth';
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocFromServer,
-  getFirestore,
-  limit,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
-  updateDoc,
-  where,
-  type Firestore,
-  type Unsubscribe,
-} from 'firebase/firestore';
+// The Firebase SDK is loaded with dynamic import() only when an account
+// feature is used, so guests never download or contact Firebase.
+import type { FirebaseApp } from 'firebase/app';
+import type { Auth, User } from 'firebase/auth';
+import type { Firestore, Unsubscribe } from 'firebase/firestore';
 import firebaseConfig from '@/firebase-applet-config.json';
+import { FUNCTIONS_REGION } from '@/lib/backend-config';
 import { clampDailyProblemGoal, DAILY_PROBLEM_GOAL } from '@/lib/daily-goal';
 import {
   buildSanitizedScorePayload,
@@ -43,6 +17,8 @@ import {
 import type { PlayableGameId } from '@/lib/guest-trial';
 import type { AgeTier } from '@/lib/types';
 
+export type { User };
+
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -52,118 +28,116 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  };
+/** Error whose message is always safe to show to a child. */
+export class AppAuthError extends Error {
+  code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
 }
 
-let cachedApp: FirebaseApp | null = null;
-let cachedDb: Firestore | null = null;
-let cachedAuth: Auth | null = null;
-let connectionTested = false;
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
+let appPromise: Promise<FirebaseApp> | null = null;
+let authPromise: Promise<Auth> | null = null;
+let dbPromise: Promise<Firestore> | null = null;
 
 export const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
-export const FIREBASE_AUTH_PROVIDERS_CONSOLE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/providers`;
 
-export function getFirebaseApp(): FirebaseApp {
-  if (!cachedApp) {
-    cachedApp =
-      getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+// ---- App Check (workstream G) -------------------------------------------
+// Enabled only when NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY is set at build
+// time; loaded via dynamic import so guests never download it.
+// Dev: NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN=true (or a registered token string).
+const APP_CHECK_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY;
+const APP_CHECK_DEBUG = process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN;
+
+async function initAppCheck(app: FirebaseApp): Promise<void> {
+  if (!APP_CHECK_SITE_KEY) return;
+  try {
+    if (IS_DEV && APP_CHECK_DEBUG) {
+      (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean | string })
+        .FIREBASE_APPCHECK_DEBUG_TOKEN =
+        APP_CHECK_DEBUG === 'true' ? true : APP_CHECK_DEBUG;
+    }
+    const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import(
+      'firebase/app-check'
+    );
+    initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch {
+    // Monitoring mode must never break the app; enforcement then rejects requests server-side.
   }
-  return cachedApp;
+}
+// ---- end App Check --------------------------------------------------------
+
+function getFirebaseApp(): Promise<FirebaseApp> {
+  appPromise ??= import('firebase/app').then(async ({ getApps, initializeApp }) => {
+    if (getApps().length > 0) return getApps()[0];
+    const app = initializeApp(firebaseConfig);
+    await initAppCheck(app); // must precede Auth/Firestore use so tokens attach
+    return app;
+  });
+  return appPromise;
 }
 
-export function getFirebaseDb(): Firestore {
-  if (!cachedDb) {
-    const app = getFirebaseApp();
-    cachedDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-  }
-  return cachedDb;
+function getFirebaseAuth(): Promise<Auth> {
+  authPromise ??= Promise.all([
+    getFirebaseApp(),
+    import('firebase/auth'),
+  ]).then(([app, { getAuth }]) => getAuth(app));
+  return authPromise;
 }
 
-export function getFirebaseAuth(): Auth {
-  if (!cachedAuth) {
-    const app = getFirebaseApp();
-    cachedAuth = getAuth(app);
-  }
-  return cachedAuth;
+function getFirebaseDb(): Promise<Firestore> {
+  dbPromise ??= Promise.all([
+    getFirebaseApp(),
+    import('firebase/firestore'),
+  ]).then(([app, { getFirestore }]) =>
+    getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  );
+  return dbPromise;
 }
 
+function errorCode(error: unknown): string {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : '';
+}
+
+/**
+ * Logs only the operation, collection and error code (never email/uid) in
+ * development, and throws a generic message that is safe for the UI.
+ */
 export function handleFirestoreError(
   error: unknown,
   operationType: OperationType,
   path: string | null
 ): never {
-  const auth = typeof window !== 'undefined' ? getFirebaseAuth() : null;
-  const currentUser = auth?.currentUser ?? null;
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: currentUser?.uid ?? null,
-      email: currentUser?.email ?? null,
-      emailVerified: currentUser?.emailVerified ?? null,
-      isAnonymous: currentUser?.isAnonymous ?? null,
-      tenantId: currentUser?.tenantId ?? null,
-      providerInfo:
-        currentUser?.providerData?.map((provider) => ({
-          providerId: provider.providerId,
-          email: provider.email,
-        })) || [],
-    },
-    operationType,
-    path,
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
-/**
- * Validates Firestore connectivity once on client boot.
- */
-export async function testFirestoreConnection(): Promise<void> {
-  if (typeof window === 'undefined' || connectionTested) return;
-  connectionTested = true;
-  try {
-    const db = getFirebaseDb();
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes('the client is offline')
-    ) {
-      console.error('Please check your Firebase configuration.');
-    }
+  if (IS_DEV) {
+    console.warn(
+      `Firestore ${operationType} failed on ${path?.split('/')[0] ?? 'unknown'}: ${errorCode(error) || 'unknown'}`
+    );
   }
+  throw new AppAuthError(
+    'app/cloud-unavailable',
+    'Cloud data is temporarily unavailable. Please try again later.'
+  );
 }
 
 export function isEmailPasswordProviderDisabledError(error: unknown): boolean {
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { code?: unknown }).code)
-      : '';
-  return code === 'auth/operation-not-allowed';
+  return errorCode(error) === 'auth/operation-not-allowed';
 }
 
 export function formatFirebaseAuthError(error: unknown): string {
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { code?: unknown }).code)
-      : '';
+  const code = errorCode(error);
+  if (IS_DEV && code) console.warn(`Auth error: ${code}`);
+  if (error instanceof AppAuthError) return error.message;
   switch (code) {
     case 'auth/email-already-in-use':
-      return 'That email is already registered. Switch to Sign In to access your account.';
+      return "We couldn't create that account. If you already registered, use Sign In or Reset Password.";
     case 'auth/invalid-email':
       return 'Please enter a valid email address.';
     case 'auth/weak-password':
@@ -171,15 +145,17 @@ export function formatFirebaseAuthError(error: unknown): string {
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
-      return 'Invalid email or password. Double-check your credentials or reset your password.';
+      return 'Invalid email or password. Double-check them or reset your password.';
     case 'auth/too-many-requests':
       return 'Too many attempts. Please wait a minute and try again.';
+    case 'auth/network-request-failed':
+      return 'Network problem. Check your connection and try again.';
+    case 'auth/requires-recent-login':
+      return 'For your safety, please sign in again and then retry.';
     case 'auth/operation-not-allowed':
-      return 'Email/Password sign-in is not yet enabled in your Firebase project. Enable it once in Firebase Console under Authentication → Sign-in method, then try again.';
+      return 'Sign-up is temporarily unavailable. Please try again later.';
     default:
-      return error instanceof Error
-        ? error.message
-        : 'Unable to complete authentication. Please try again.';
+      return 'Something went wrong. Please try again.';
   }
 }
 
@@ -194,8 +170,63 @@ export interface RemoteUserProfile {
 export function subscribeToAuthState(
   callback: (user: User | null) => void
 ): Unsubscribe {
-  const auth = getFirebaseAuth();
-  return onAuthStateChanged(auth, callback);
+  let unsub: Unsubscribe | null = null;
+  let cancelled = false;
+  void Promise.all([getFirebaseAuth(), import('firebase/auth')])
+    .then(([auth, { onAuthStateChanged }]) => {
+      if (!cancelled) unsub = onAuthStateChanged(auth, callback);
+    })
+    .catch(() => {});
+  return () => {
+    cancelled = true;
+    unsub?.();
+  };
+}
+
+// Default is session-only (safe on shared/school computers); 'remember me'
+// opts in to persistence across browser restarts.
+async function applyPersistence(auth: Auth, sharedDevice: boolean) {
+  const { setPersistence, browserLocalPersistence, browserSessionPersistence } =
+    await import('firebase/auth');
+  await setPersistence(
+    auth,
+    sharedDevice ? browserSessionPersistence : browserLocalPersistence
+  );
+}
+
+function cleanEmailOf(email: string): string {
+  return email.trim().toLowerCase().slice(0, 120);
+}
+
+async function writeProfileDoc(params: {
+  uid: string;
+  displayName: string;
+  email: string;
+  ageTier: AgeTier;
+  dailyProblemGoal: number;
+}): Promise<void> {
+  const [db, fs] = await Promise.all([
+    getFirebaseDb(),
+    import('firebase/firestore'),
+  ]);
+  const ref = fs.doc(db, 'users', params.uid);
+  const fields = {
+    displayName: params.displayName.trim().slice(0, 28) || 'Scholar',
+    email: cleanEmailOf(params.email),
+    ageTier: params.ageTier,
+    dailyProblemGoal: clampDailyProblemGoal(params.dailyProblemGoal),
+    updatedAt: fs.serverTimestamp(),
+  };
+  const snap = await fs.getDoc(ref);
+  if (snap.exists()) {
+    await fs.updateDoc(ref, fields);
+  } else {
+    await fs.setDoc(ref, {
+      uid: params.uid,
+      ...fields,
+      createdAt: fs.serverTimestamp(),
+    });
+  }
 }
 
 export async function registerWithEmail(params: {
@@ -206,40 +237,51 @@ export async function registerWithEmail(params: {
   dailyProblemGoal: number;
   sharedDevice: boolean;
 }): Promise<User> {
-  const auth = getFirebaseAuth();
-  await setPersistence(
-    auth,
-    params.sharedDevice ? browserSessionPersistence : browserLocalPersistence
-  );
+  const auth = await getFirebaseAuth();
+  const a = await import('firebase/auth');
+  await applyPersistence(auth, params.sharedDevice);
 
-  const cleanEmail = params.email.trim().toLowerCase().slice(0, 120);
-  const cleanName = params.displayName.trim().slice(0, 28) || 'Scholar';
-  const cleanGoal = clampDailyProblemGoal(params.dailyProblemGoal);
+  const email = cleanEmailOf(params.email);
+  const displayName = params.displayName.trim().slice(0, 28) || 'Scholar';
 
-  const credential = await createUserWithEmailAndPassword(
-    auth,
-    cleanEmail,
-    params.password
-  );
-  await updateProfile(credential.user, { displayName: cleanName });
-
-  const db = getFirebaseDb();
-  const profilePath = `users/${credential.user.uid}`;
+  let user: User;
   try {
-    await setDoc(doc(db, 'users', credential.user.uid), {
-      uid: credential.user.uid,
-      displayName: cleanName,
-      email: cleanEmail,
-      ageTier: params.ageTier,
-      dailyProblemGoal: cleanGoal,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    user = (await a.createUserWithEmailAndPassword(auth, email, params.password))
+      .user;
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, profilePath);
+    // Recover from an earlier half-finished registration (auth user created,
+    // profile write failed) by signing in with the same credentials.
+    if (errorCode(error) !== 'auth/email-already-in-use') throw error;
+    try {
+      user = (await a.signInWithEmailAndPassword(auth, email, params.password))
+        .user;
+    } catch {
+      throw error;
+    }
   }
 
-  return credential.user;
+  try {
+    await a.updateProfile(user, { displayName });
+    await writeProfileDoc({
+      uid: user.uid,
+      displayName,
+      email,
+      ageTier: params.ageTier,
+      dailyProblemGoal: params.dailyProblemGoal,
+    });
+  } catch (error) {
+    if (IS_DEV) console.warn(`Profile setup failed: ${errorCode(error)}`);
+    await a.signOut(auth).catch(() => {});
+    throw new AppAuthError(
+      'app/profile-setup-incomplete',
+      'Your account was created but setup did not finish. Please press Create Account again with the same details.'
+    );
+  }
+
+  if (!user.emailVerified) {
+    await a.sendEmailVerification(user).catch(() => {});
+  }
+  return user;
 }
 
 export async function signInWithEmail(params: {
@@ -247,37 +289,90 @@ export async function signInWithEmail(params: {
   password: string;
   sharedDevice: boolean;
 }): Promise<User> {
-  const auth = getFirebaseAuth();
-  await setPersistence(
+  const auth = await getFirebaseAuth();
+  const a = await import('firebase/auth');
+  await applyPersistence(auth, params.sharedDevice);
+  const credential = await a.signInWithEmailAndPassword(
     auth,
-    params.sharedDevice ? browserSessionPersistence : browserLocalPersistence
-  );
-  const cleanEmail = params.email.trim().toLowerCase().slice(0, 120);
-  const credential = await signInWithEmailAndPassword(
-    auth,
-    cleanEmail,
+    cleanEmailOf(params.email),
     params.password
   );
   return credential.user;
 }
 
 export async function sendAccountPasswordReset(email: string): Promise<void> {
-  const auth = getFirebaseAuth();
-  await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+  const [auth, a] = await Promise.all([
+    getFirebaseAuth(),
+    import('firebase/auth'),
+  ]);
+  await a.sendPasswordResetEmail(auth, cleanEmailOf(email));
 }
 
 export async function signOutAccount(): Promise<void> {
-  const auth = getFirebaseAuth();
-  await signOut(auth);
+  const [auth, a] = await Promise.all([
+    getFirebaseAuth(),
+    import('firebase/auth'),
+  ]);
+  await a.signOut(auth);
+}
+
+/** Reloads the user and returns whether the email address is verified. */
+export async function checkEmailVerified(): Promise<boolean> {
+  const auth = await getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user) return false;
+  await user.reload().catch(() => {});
+  if (user.emailVerified) await user.getIdToken(true).catch(() => {});
+  return user.emailVerified;
+}
+
+export async function resendVerificationEmail(): Promise<void> {
+  const [auth, a] = await Promise.all([
+    getFirebaseAuth(),
+    import('firebase/auth'),
+  ]);
+  if (auth.currentUser) await a.sendEmailVerification(auth.currentUser);
+}
+
+/**
+ * Deletes the account: re-authenticates, then (best effort) the profile
+ * document (scores/consents are erased by a Cloud Function), then the Auth user. No data export is offered.
+ */
+export async function deleteAccount(password: string): Promise<void> {
+  const [auth, a, fs, db] = await Promise.all([
+    getFirebaseAuth(),
+    import('firebase/auth'),
+    import('firebase/firestore'),
+    getFirebaseDb(),
+  ]);
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new AppAuthError('app/no-user', 'You are not signed in.');
+  }
+  await a.reauthenticateWithCredential(
+    user,
+    a.EmailAuthProvider.credential(user.email, password)
+  );
+  // Scores, rounds and consent records are erased server-side by the
+  // eraseUserData auth-trigger function (rules deny client deletes).
+  try {
+    await fs.deleteDoc(fs.doc(db, 'users', user.uid));
+  } catch (error) {
+    if (IS_DEV) console.warn(`Profile cleanup failed: ${errorCode(error)}`);
+  }
+  await a.deleteUser(user);
 }
 
 export async function fetchUserProfileDoc(
   uid: string
 ): Promise<RemoteUserProfile | null> {
-  const db = getFirebaseDb();
   const path = `users/${uid}`;
   try {
-    const snap = await getDoc(doc(db, 'users', uid));
+    const [db, fs] = await Promise.all([
+      getFirebaseDb(),
+      import('firebase/firestore'),
+    ]);
+    const snap = await fs.getDoc(fs.doc(db, 'users', uid));
     if (!snap.exists()) return null;
     const data = snap.data();
     const ageTier: AgeTier =
@@ -312,136 +407,225 @@ export async function upsertUserProfileDoc(params: {
   ageTier: AgeTier;
   dailyProblemGoal: number;
 }): Promise<void> {
-  const db = getFirebaseDb();
-  const path = `users/${params.uid}`;
-  const ref = doc(db, 'users', params.uid);
-  const cleanName = params.displayName.trim().slice(0, 28) || 'Scholar';
-  const cleanEmail = params.email.trim().toLowerCase().slice(0, 120);
-  const cleanGoal = clampDailyProblemGoal(params.dailyProblemGoal);
-
   try {
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      await updateDoc(ref, {
-        displayName: cleanName,
-        email: cleanEmail,
-        ageTier: params.ageTier,
-        dailyProblemGoal: cleanGoal,
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      await setDoc(ref, {
-        uid: params.uid,
-        displayName: cleanName,
-        email: cleanEmail,
-        ageTier: params.ageTier,
-        dailyProblemGoal: cleanGoal,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    }
+    await writeProfileDoc(params);
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    handleFirestoreError(error, OperationType.WRITE, `users/${params.uid}`);
   }
 }
 
+// Callable functions are in Mumbai (see functions/src/index.ts).
+// FUNCTIONS_REGION lives in lib/backend-config.ts (shared with the CSP middleware).
+
 /**
- * Persists a single per-game score document for a signed-in user to Firestore.
+ * Kill switch for cloud score posting (workstream G flag). Default: the
+ * server-validated callable path is ON. Build with
+ * NEXT_PUBLIC_CLIENT_SCORE_WRITES=off to stop the client posting scores at all.
+ * (The legacy direct client write path no longer exists: rules deny it.)
+ */
+const CLOUD_SCORES_ENABLED = process.env.NEXT_PUBLIC_CLIENT_SCORE_WRITES !== 'off';
+
+async function callFunction<T>(name: string, data: unknown): Promise<T> {
+  const [app, fn] = await Promise.all([getFirebaseApp(), import('firebase/functions')]);
+  const res = await fn.httpsCallable(fn.getFunctions(app, FUNCTIONS_REGION), name)(data);
+  return res.data as T;
+}
+
+// ---- Consent callables (backend: functions/src/consent.ts) -----------------
+export async function callRequestParentalConsent(parentEmail: string): Promise<void> {
+  await callFunction('requestParentalConsent', { parentEmail });
+}
+export async function callRecordSelfConsent(): Promise<void> {
+  await callFunction('recordSelfConsent', {});
+}
+export async function callWithdrawConsent(): Promise<void> {
+  await callFunction('withdrawConsent', {});
+}
+/** Reads the signed-in user's own consents/{uid} (rules: owner read only). */
+export async function readOwnConsentDoc(uid: string): Promise<Record<string, unknown> | null> {
+  const [fs, db] = await Promise.all([import('firebase/firestore'), getFirebaseDb()]);
+  const snap = await fs.getDoc(fs.doc(db, 'consents', uid));
+  return snap.exists() ? (snap.data() as Record<string, unknown>) : null;
+}
+
+/** One open round token per game, created by startRound (server-timed). */
+const openRounds = new Map<PlayableGameId, string>();
+
+/**
+ * Asks the server to open a round for this game (call when the player
+ * enters a game screen; replaced automatically after each submit). Best
+ * effort: failures (no consent, unverified email, offline) just mean the
+ * score will not be posted. Guests must not call this.
+ */
+export async function beginCloudRound(gameId: PlayableGameId, tier: AgeTier): Promise<void> {
+  if (!CLOUD_SCORES_ENABLED) return;
+  try {
+    const auth = await getFirebaseAuth();
+    if (!auth.currentUser) return;
+    const { roundId } = await callFunction<{ roundId: string }>('startRound', { gameId, tier });
+    openRounds.set(gameId, roundId);
+  } catch (error) {
+    openRounds.delete(gameId);
+    if (IS_DEV) console.warn(`startRound failed: ${errorCode(error)}`);
+  }
+}
+
+export interface CloudScoreResult {
+  saved: boolean;
+  best: number;
+  scoreId: string;
+}
+
+/**
+ * Submits a finished round. The SERVER decides the document id, date, name
+ * and whether the score is plausible (functions/src/scores.ts); the client
+ * cannot write gameScores (rules deny it). `displayName`/`dateKey` are
+ * accepted for call-site compatibility but are not sent.
  */
 export async function saveCloudGameScore(params: {
   uid: string;
-  displayName: string;
+  displayName?: string;
   gameId: PlayableGameId;
   tier: AgeTier;
   score: number;
   accuracyPercent: number;
   dateKey?: string;
-}): Promise<string> {
-  const db = getFirebaseDb();
-  const sanitized = buildSanitizedScorePayload(params);
-  const randomSuffix = Math.random().toString(36).slice(2, 10);
-  const scoreId = `sc_${Date.now()}_${randomSuffix}`;
-  const path = `gameScores/${scoreId}`;
-
+  stats?: Record<string, number | string | boolean | number[]>;
+}): Promise<CloudScoreResult> {
+  const sanitized = buildSanitizedScorePayload({
+    ...params,
+    displayName: params.displayName ?? 'Player',
+  });
+  const roundId = openRounds.get(sanitized.gameId);
+  openRounds.delete(sanitized.gameId);
+  if (!CLOUD_SCORES_ENABLED) {
+    throw new AppAuthError('app/scores-disabled', 'Online scores are switched off.');
+  }
   try {
-    await setDoc(doc(db, 'gameScores', scoreId), {
-      ...sanitized,
-      createdAt: serverTimestamp(),
+    const auth = await getFirebaseAuth();
+    if (!auth.currentUser || auth.currentUser.uid !== sanitized.uid) {
+      throw new AppAuthError('app/not-signed-in', 'Sign in to save scores.');
+    }
+    if (!roundId) {
+      throw new AppAuthError('app/no-round', 'Score was not saved (no active round).');
+    }
+    const result = await callFunction<CloudScoreResult>('submitScore', {
+      roundId,
+      score: sanitized.score,
+      accuracyPercent: sanitized.accuracyPercent,
+      stats: params.stats ?? {},
     });
-    return scoreId;
+    return result;
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, path);
+    if (error instanceof AppAuthError) throw error;
+    if (IS_DEV) console.warn(`submitScore failed: ${errorCode(error)}`);
+    throw new AppAuthError('app/score-rejected', 'Score could not be saved right now.');
+  } finally {
+    // Next replay of this game gets a fresh server-timed round.
+    void beginCloudRound(sanitized.gameId, sanitized.tier);
   }
 }
 
 /**
- * Subscribes in real time to public game score documents for a given day or week.
- * Uses only single-field equality filters (`visibility == 'public'` + `dateKey` or `weekKey`)
- * so it works out of the box without requiring custom composite indexes.
+ * Subscribes to the signed-in leaderboard for a day or week. The week is a
+ * dateKey range query (single-field index only). Guests never touch Firebase.
  */
 export function subscribeToPeriodGameScores(params: {
   period: LeaderboardPeriod;
   todayKey: string;
+  signedIn: boolean;
   onUpdate: (records: CloudGameScoreRecord[]) => void;
   onError?: (message: string) => void;
 }): Unsubscribe {
-  const db = getFirebaseDb();
-  const periodField = params.period === 'day' ? 'dateKey' : 'weekKey';
-  const periodValue =
-    params.period === 'day' ? params.todayKey : getIsoWeekKey(params.todayKey);
-  const path = 'gameScores';
+  if (!params.signedIn) {
+    params.onError?.('Sign in with a free account to see the live Top 10.');
+    return () => {};
+  }
+  let unsub: Unsubscribe | null = null;
+  let cancelled = false;
+  const fail = (message: string) => {
+    if (!cancelled) params.onError?.(message);
+  };
 
-  const q = query(
-    collection(db, path),
-    where('visibility', '==', 'public'),
-    where(periodField, '==', periodValue),
-    limit(250)
-  );
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const rows: CloudGameScoreRecord[] = [];
-      snapshot.forEach((docSnap) => {
-        const d = docSnap.data();
-        const createdAtVal = d.createdAt;
-        const createdAtMs =
-          createdAtVal instanceof Timestamp
-            ? createdAtVal.toMillis()
-            : Date.now();
-        rows.push({
-          id: docSnap.id,
-          uid: String(d.uid ?? ''),
-          displayName: String(d.displayName ?? 'Scholar'),
-          gameId: d.gameId as PlayableGameId,
-          gameTitle: String(d.gameTitle ?? 'Game'),
-          tier:
-            d.tier === 'explorers' ||
-            d.tier === 'challengers' ||
-            d.tier === 'strategists'
-              ? d.tier
-              : 'challengers',
-          score: typeof d.score === 'number' ? d.score : 0,
-          accuracyPercent:
-            typeof d.accuracyPercent === 'number' ? d.accuracyPercent : 0,
-          dateKey: String(d.dateKey ?? params.todayKey),
-          weekKey: String(d.weekKey ?? getIsoWeekKey(params.todayKey)),
-          visibility: 'public',
-          createdAtMs,
-        });
-      });
-      params.onUpdate(rows);
-    },
-    (error) => {
-      try {
-        handleFirestoreError(error, OperationType.LIST, path);
-      } catch (err) {
-        if (params.onError) {
-          params.onError(
-            err instanceof Error ? err.message : 'Unable to load scores.'
-          );
-        }
+  void (async () => {
+    try {
+      const [auth, db, fs] = await Promise.all([
+        getFirebaseAuth(),
+        getFirebaseDb(),
+        import('firebase/firestore'),
+      ]);
+      await auth.authStateReady();
+      if (cancelled) return;
+      if (!auth.currentUser) {
+        fail('Sign in with a free account to see the live Top 10.');
+        return;
       }
+      const col = fs.collection(db, 'gameScores');
+      let q;
+      if (params.period === 'day') {
+        q = fs.query(col, fs.where('dateKey', '==', params.todayKey), fs.limit(250));
+      } else {
+        const [y, m, d] = params.todayKey.split('-').map(Number);
+        const day = new Date(Date.UTC(y, m - 1, d));
+        const dow = day.getUTCDay() || 7;
+        const iso = (offset: number) =>
+          new Date(day.getTime() + (offset - dow + 1) * 86400000)
+            .toISOString()
+            .slice(0, 10);
+        q = fs.query(
+          col,
+          fs.where('dateKey', '>=', iso(0)),
+          fs.where('dateKey', '<=', iso(6)),
+          fs.limit(250)
+        );
+      }
+      unsub = fs.onSnapshot(
+        q,
+        (snapshot) => {
+          const rows: CloudGameScoreRecord[] = [];
+          snapshot.forEach((docSnap) => {
+            const d = docSnap.data();
+            const dateKey = String(d.dateKey ?? params.todayKey);
+            const createdAtMs =
+              typeof d.createdAt?.toMillis === 'function'
+                ? d.createdAt.toMillis()
+                : Date.now();
+            rows.push({
+              id: docSnap.id,
+              uid: String(d.uid ?? ''),
+              displayName: String(d.displayName ?? 'Scholar'),
+              gameId: d.gameId as PlayableGameId,
+              gameTitle: String(d.gameTitle ?? 'Game'),
+              tier:
+                d.tier === 'explorers' ||
+                d.tier === 'challengers' ||
+                d.tier === 'strategists'
+                  ? d.tier
+                  : 'challengers',
+              score: typeof d.score === 'number' ? d.score : 0,
+              accuracyPercent:
+                typeof d.accuracyPercent === 'number' ? d.accuracyPercent : 0,
+              dateKey,
+              weekKey: getIsoWeekKey(dateKey),
+              visibility: 'public',
+              createdAtMs,
+            });
+          });
+          if (!cancelled) params.onUpdate(rows);
+        },
+        (error) => {
+          if (IS_DEV) console.warn(`Leaderboard failed: ${errorCode(error)}`);
+          fail('Unable to load scores.');
+        }
+      );
+      if (cancelled) unsub();
+    } catch {
+      fail('Unable to load scores.');
     }
-  );
+  })();
+
+  return () => {
+    cancelled = true;
+    unsub?.();
+  };
 }

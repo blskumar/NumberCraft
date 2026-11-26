@@ -1,22 +1,41 @@
-# Numbercraft Firestore Security Specification (Phase 0)
+# Numbercraft Firestore Security Specification
 
-## 1. Data Invariants
-1. **Strict PII Isolation (`/users/{userId}`)**: Private user documents containing `email` may ONLY be read (`get`), created, updated, or deleted by the authenticated owner (`request.auth.uid == userId`). Blanket `list` queries on `/users` are strictly denied.
-2. **Identity Integrity**: Both `/users/{userId}` and `/gameScores/{scoreId}` require `incoming().uid == request.auth.uid` on create and prohibit changing `uid` or `createdAt` on update.
-3. **Immutable Score Integrity (`/gameScores/{scoreId}`)**: Submitted game scores are append-only (`allow update: if false;`) to prevent post-hoc score tampering. Players may only submit scores under their own `uid` with bounded numeric values (`0 <= score <= 100000`, `0 <= accuracyPercent <= 100`), canonical `gameId`, and strict `YYYY-MM-DD` / `YYYY-Www` calendar keys.
-4. **Zero-PII Public Leaderboards**: `/gameScores/{scoreId}` documents never store `email`, phone numbers, or sensitive fields. `allow get` and `allow list` require explicit `resource.data.visibility == 'public'` checks enforced rule-side.
-5. **Temporal & Volumetric Hardening**: All `createdAt` and `updatedAt` timestamps must match `request.time`; all string fields enforce explicit `.size()` bounds; all document IDs enforce `isValidId()` (`^[a-zA-Z0-9_\-]+$`, `<= 128` chars).
+## 1. Data invariants
+1. **Private profiles (`/users/{userId}`)**: only the authenticated owner may get, create, update or delete. `list` is denied. The stored `email` must equal `request.auth.token.email`. `displayName` must pass a rules-level check (2-20 chars, letters of any script, combining marks, digits, space `- _ .`; no leading/trailing space). Profanity, PII and impersonation checks cannot be written in rules and run in `lib/name-moderation.ts` (client) and again in the `submitScore` function.
+2. **Identity integrity**: `uid` must equal `request.auth.uid` on create; `uid` and `createdAt` cannot change on update.
+3. **Scores are server-written only (`/gameScores/{uid}_{gameId}_{serverUTCDate}`)**: clients get `read` (signed-in) but **no create/update/delete**. The `submitScore` Cloud Function (Admin SDK) validates and writes one best-of-day document per user, game and day.
+4. **Server-only collections**: `rounds` (server-timed round tokens, TTL), `scoreFlags` (anomalies, admin only), `rateLimits`, `consentRequests`, `consentArchive`: no client access at all.
+5. **Consent (`/consents/{uid}`)**: the owner may `get` their own status; **no client writes**. Only the backend writes it (see section 5).
+6. **No impersonation**: the name on a score is read from `users/{uid}` by the function and re-moderated; a blocked name is replaced by a generated one.
+7. **Erasure**: the `eraseUserData` Auth-trigger function deletes scores, rounds, flags, consent requests and the profile when the account is deleted; the consent evidence is archived under a salted hash of the uid (retention to be confirmed by counsel).
 
-## 2. The "Dirty Dozen" Adversarial Payloads
-1. **Unauthenticated Score Injection**: Unauthenticated client attempts `create` on `/gameScores/score-1`. -> `PERMISSION_DENIED`.
-2. **Identity Spoofing on Score Create**: Authenticated user `u1` creates `/gameScores/score-2` with `uid: "u2"`. -> `PERMISSION_DENIED`.
-3. **Ghost / Shadow Field Injection**: Authenticated user `u1` creates `/gameScores/score-3` with extra field `isAdmin: true`. -> `PERMISSION_DENIED`.
-4. **Score Tampering via Update**: Authenticated user `u1` attempts `update` on their own `/gameScores/score-1` to raise `score: 99999`. -> `PERMISSION_DENIED`.
-5. **Cross-User Score Deletion**: Authenticated user `u2` attempts `delete` on `u1`'s `/gameScores/score-1`. -> `PERMISSION_DENIED`.
-6. **Out-of-Bounds / Negative Score Poisoning**: Authenticated user `u1` submits `score: 999999999` or `score: -50`. -> `PERMISSION_DENIED`.
-7. **Invalid `gameId` Injection**: Authenticated user `u1` submits `gameId: "hacked-mode"`. -> `PERMISSION_DENIED`.
-8. **Malformed Calendar Key / ID Poisoning**: Authenticated user `u1` creates `/gameScores/invalid..id/path` or `dateKey: "yesterday"`. -> `PERMISSION_DENIED`.
-9. **Client-Forged Timestamp**: Authenticated user `u1` submits a past `createdAt` instead of `request.time`. -> `PERMISSION_DENIED`.
-10. **PII Cross-User Read (`get`)**: Authenticated user `u2` attempts `get` on `/users/u1` to scrape `email`. -> `PERMISSION_DENIED`.
-11. **PII Directory Scraping (`list`)**: Authenticated user `u1` attempts `list` on `/users`. -> `PERMISSION_DENIED`.
-12. **Immutable Profile Field Mutation**: Authenticated user `u1` attempts `update` on `/users/u1` modifying `uid` or `createdAt`, or adding `role: "admin"`. -> `PERMISSION_DENIED`.
+## 2. What is public (be honest)
+Scores are readable by **any signed-in user** (no anonymous reads). Each score exposes: `uid` (stable Firebase UID), `displayName`, age `tier` (the `explorers` tier implies a young child), `gameId`, `score`, `accuracyPercent`, `dateKey`. Email is never stored on scores. This is **not** "zero-PII". Only users with a current granted consent record ever get a score document, so nobody without consent appears on the board.
+
+## 3. Score validation and its limits
+The server cannot replay the game. `submitScore` checks: verified email, current granted consent, an open, owned, unexpired server-issued round, server-measured elapsed time, per-game hard score bound derived from the engine constants, accuracy consistent with stats, per-uid daily caps and one open round per uid+game. Anomalies are written to `scoreFlags`. Residual: a forged but plausible score under the hard bound is accepted; Odds & Urns bounds and p99 flags are heuristic; sybil accounts can still fill the board (enable App Check, Auth quotas). Factor Grid solo supports move-log replay on the server; other games need seeded RNG and move logs. Details: `functions/README.md`.
+
+## 4. Other residual risks (owner action)
+- Enable App Check (set `ENFORCE_APP_CHECK=true` on the functions once the client ships it), Auth email-enumeration protection, API-key referrer restriction.
+- A child who self-declares adult is not detected (age is not verified). Without consent a user has no cloud presence. Legal review (DPDP s.9, Rule 10) decides whether email-link verification is sufficient.
+- The leaderboard day is the server UTC date.
+
+## 5. Parental consent flow (docs/legal/04 has the legal spec)
+1. Sign-up asks the age band only. Adults call `recordSelfConsent` (status `granted`, method `self`).
+2. A minor calls `requestParentalConsent({parentEmail})`. The function checks the address (not the child's own), rate limits (3 per child per 24 h, 5 per parent address per day), writes `consents/{uid}` as `pending-parental-consent`, stores the SHA-256 of a random 256-bit token in `consentRequests/{hash}` (7-day TTL, parent email kept only until the decision) and sends the link through the `Mailer` interface.
+3. The parent opens `confirmParentalConsent?t=token`, sees the notice and the child's display name only, and chooses Yes or No (POST). The token is single use. Yes writes `consents/{uid}` `{status: granted, method: parent-email-link, version, grantedAt}`, deletes the request and emails a receipt with a withdrawal link (a new single-use token, 1-year validity).
+4. While status is not `granted` for the current `CONSENT_VERSION` (pending, declined, expired, withdrawn, version bump, no record), `startRound` and `submitScore` fail with `consent-required` and no score document exists. Withdrawal (parent link or `withdrawConsent`) erases scores. Account deletion triggers `eraseUserData`.
+5. Rules: clients cannot create, update or delete `consents`/`consentRequests`; only the owner can read their own `consents` doc.
+
+## 6. Tests
+- `firestore.rules.emu.test.mjs` (15 cases): signed-in reads, every client write to `gameScores`, `rounds`, `scoreFlags`, `rateLimits`, `consentRequests`, `consentArchive`, `consents` denied, displayName rules check, email/token match, cross-user access.
+- `functions/test/functions.test.ts` (25 cases, Firestore emulator): happy path, replay of a round id, forged score, too-fast round, unverified email, wrong owner, rate limits, best-of-day, expired round, name re-moderation, consent gating, the full parent consent flow (request, confirm, single use, decline, expiry, withdraw, erase), rate limits, replay verification.
+- Run with the Firestore emulator (JDK 21+): `firebase emulators:exec --only firestore "node --test ..."`.
+
+## 7. Client, headers and deployment (integrated design)
+- **Guests never touch Firebase.** The SDK is lazy-loaded; auth is watched only after a signed-in profile is hydrated from storage or the user signs in. Guest data stays in `localStorage`.
+- **Client writes**: only `users/{uid}` (own profile). Scores, rounds and consent go through callables in `asia-south1` (`startRound`, `submitScore`, `requestParentalConsent`, `recordSelfConsent`, `withdrawConsent`); the `lib/consent-client.ts` helpers wrap them. `NEXT_PUBLIC_CLIENT_SCORE_WRITES=off` (build time) stops the client posting scores (kill switch); default is on. After email verification the ID token is force-refreshed (`getIdToken(true)`) so `email_verified` is current.
+- **Headers** (`middleware.ts`): per-request nonce CSP (`script-src 'self' 'nonce-N' 'strict-dynamic'`), `connect-src` limited to the Firebase Auth/Firestore/App Check hosts, reCAPTCHA and the single host `https://asia-south1-<project>.cloudfunctions.net`; plus nosniff, Referrer-Policy, X-Frame-Options DENY, Permissions-Policy, HSTS. `style-src-attr 'unsafe-inline'` remains (inline style attributes).
+- **Mirrored constants** (`CONSENT_VERSION`, functions region) are checked by `lib/backend-sync.test.ts`.
+- Sign-out and account deletion clear the local consent hint; "clear local progress" also resets guest trials and personal prefs. Settings has "Withdraw consent" (calls `withdrawConsent`, erasing online scores) and "Delete my account".
+- Existing accounts have no `consents/` record and must consent again before scores post (no dedicated re-consent screen yet).

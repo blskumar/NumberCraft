@@ -97,7 +97,7 @@ describe('Daily Milestone Focus Arena & 1.5x Multiplier (lib/daily-milestone.ts)
     assert.equal(applyMilestoneMultiplier(10, 1.5), 15);
     assert.equal(applyMilestoneMultiplier(4, undefined), 4);
 
-    // 2 consecutive Factor Grid wins with 1.5x Daily Milestone multiplier = 3.0 streak & 12 prime credit
+    // 2 boosted Factor Grid wins: prime credit is boosted (12) but the win streak stays an integer (2)
     const boostedMatches: MatchRecord[] = [
       makeBaseMatch({
         id: 'boost-1',
@@ -117,14 +117,15 @@ describe('Daily Milestone Focus Arena & 1.5x Multiplier (lib/daily-milestone.ts)
     const earnedIds = new Set(evalRes.earnedRecords.map((r) => r.id));
     assert.equal(evalRes.dailyMilestoneBoostedCount, 2);
     assert.equal(earnedIds.has('prime-collector'), true);
-    assert.equal(earnedIds.has('perfect-streak'), true);
+    assert.equal(earnedIds.has('perfect-streak'), false);
+    assert.equal(evalRes.currentStreak, 2);
 
-    // Daily goal credit also scales by 1.5x (2 Factor Grid rounds: 3 * 1.5 = 5 each -> 10)
+    // Daily goal credit is NOT inflated by the multiplier (it boosts points, not problem counts): 3 each -> 6
     const todayProblems = countProblemsSolvedOnDate(
       boostedMatches,
       [],
       '2026-11-20'
     );
-    assert.equal(todayProblems, 10);
+    assert.equal(todayProblems, 6);
   });
 });

@@ -79,6 +79,7 @@ export const CHAMBER_SPECS: Record<ProbabilityChamber, ChamberSpec> = {
 };
 
 export function gcd(a: number, b: number): number {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 1;
   let x = Math.abs(Math.round(a));
   let y = Math.abs(Math.round(b));
   while (y !== 0) {
@@ -90,8 +91,8 @@ export function gcd(a: number, b: number): number {
 }
 
 export function formatReducedFraction(num: number, den: number): string {
-  if (den <= 0) return '0/1';
-  if (num <= 0) return `0/${den}`;
+  if (!Number.isFinite(den) || den <= 0) return '0/1';
+  if (!Number.isFinite(num) || num <= 0) return `0/${den}`;
   const g = gcd(num, den);
   return `${num / g}/${den / g}`;
 }
@@ -196,6 +197,7 @@ export function computeChamberOdds(params: {
         : 0;
   }
 
+  den = Math.max(1, den); // degenerate (empty) wheel: avoid 0/0 = NaN
   const pSafe = safeNum / den;
   const pHazard = 1 - pSafe;
   const safePercent = Math.round(pSafe * 1000) / 10;
@@ -228,8 +230,10 @@ export function evaluateOddsEstimate(
   estimatedPercent: number,
   actualSafePercent: number
 ): { accurate: boolean; errorMargin: number; bonusPoints: number } {
-  const errorMargin = Math.round(Math.abs(estimatedPercent - actualSafePercent) * 10) / 10;
-  const accurate = errorMargin <= 6;
+  const raw = Math.abs(estimatedPercent - actualSafePercent);
+  const errorMargin = Number.isFinite(raw) ? Math.round(raw * 10) / 10 : 100;
+  // A probability outside [0, 100] is never "accurate".
+  const accurate = estimatedPercent >= 0 && estimatedPercent <= 100 && errorMargin <= 6;
   return {
     accurate,
     errorMargin,
@@ -252,12 +256,24 @@ export function executeChamberDraw(params: {
   nextSpinner: SpinnerWheelState;
 } {
   const rand = params.rng ?? Math.random;
+  // Index in [0, n-1] even for a misbehaving rng (negative, NaN, >= 1) or n = 0.
+  const pick = (n: number) =>
+    Math.max(0, Math.min(n - 1, Math.floor(rand() * n) || 0));
 
   if (params.chamber === 'marble-urn') {
-    const idx = Math.min(
-      params.urnMarbles.length - 1,
-      Math.floor(rand() * params.urnMarbles.length)
-    );
+    if (params.urnMarbles.length === 0) {
+      return {
+        outcome: {
+          safe: true,
+          pointsGained: 0,
+          headline: 'The urn is empty',
+          detail: 'No marbles left to draw—bank your pot.',
+        },
+        nextUrn: params.urnMarbles,
+        nextSpinner: params.spinnerWheel,
+      };
+    }
+    const idx = pick(params.urnMarbles.length);
     const marble = params.urnMarbles[idx];
     const withoutReplacement = params.tier !== 'explorers';
     const nextUrn = withoutReplacement
@@ -294,8 +310,8 @@ export function executeChamberDraw(params: {
   }
 
   if (params.chamber === 'twin-dice') {
-    const d1 = Math.floor(rand() * 6) + 1;
-    const d2 = Math.floor(rand() * 6) + 1;
+    const d1 = pick(6) + 1;
+    const d2 = pick(6) + 1;
     const sum = d1 + d2;
     const isHazard =
       sum === 7 || (params.tier === 'strategists' && d1 === 1 && d2 === 1);
@@ -336,7 +352,7 @@ export function executeChamberDraw(params: {
     params.spinnerWheel.cobaltCount +
     params.spinnerWheel.emeraldCount +
     params.spinnerWheel.hazardCount;
-  const sector = Math.min(total - 1, Math.floor(rand() * total));
+  const sector = pick(total);
   if (sector < params.spinnerWheel.cobaltCount) {
     return {
       outcome: {
@@ -352,6 +368,7 @@ export function executeChamberDraw(params: {
   }
   if (sector < params.spinnerWheel.cobaltCount + params.spinnerWheel.emeraldCount) {
     // Conditional upgrade: shifts 1 hazard sector into a safe cobalt sector!
+    const converts = params.spinnerWheel.hazardCount > 1;
     const nextSpinner: SpinnerWheelState =
       params.spinnerWheel.hazardCount > 1
         ? {
@@ -366,8 +383,9 @@ export function executeChamberDraw(params: {
         safe: true,
         pointsGained: 22,
         headline: 'Emerald Boost Sector (+22 pts!)',
-        detail:
-          'Conditional upgrade triggered—1 hazard sector converted to safe Cobalt for your next spin!',
+        detail: converts
+          ? 'Conditional upgrade triggered—1 hazard sector converted to safe Cobalt for your next spin!'
+          : 'Conditional upgrade triggered—only one hazard sector is left, so the wheel stays as it is.',
         spinnerSector: sector,
       },
       nextUrn: params.urnMarbles,
@@ -434,6 +452,8 @@ export function buildOddsUrnsMatchRecord(params: {
   chamber: ProbabilityChamber;
   playerScore: number;
   opponentScore: number;
+  /** Rounds the player actually solved; credited to the daily goal. */
+  solvedRounds?: number;
 }): MatchRecord {
   const result: 'win' | 'loss' | 'draw' =
     params.playerScore > params.opponentScore
@@ -442,11 +462,13 @@ export function buildOddsUrnsMatchRecord(params: {
         ? 'loss'
         : 'draw';
 
-  const chamberTitle = CHAMBER_SPECS[params.chamber].title;
+  const chamberTitle = CHAMBER_SPECS[params.chamber]?.title ?? 'Odds & Urns';
   const opponentName =
     params.mode === 'solo'
       ? `EV Par (${chamberTitle})`
-      : `EV Bot · ${params.aiDifficulty[0].toUpperCase()}${params.aiDifficulty.slice(1)}`;
+      : params.mode === 'local'
+        ? 'Player 2'
+        : `EV Bot · ${params.aiDifficulty[0].toUpperCase()}${params.aiDifficulty.slice(1)}`;
 
   return {
     id: `odds-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -461,5 +483,9 @@ export function buildOddsUrnsMatchRecord(params: {
     result,
     primesClaimed: 0,
     playedAt: new Date().toISOString(),
+    solvedProblems:
+      typeof params.solvedRounds === 'number' && Number.isFinite(params.solvedRounds)
+        ? Math.max(0, Math.floor(params.solvedRounds))
+        : undefined,
   };
 }

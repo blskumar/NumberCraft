@@ -8,7 +8,7 @@ export const MAX_DAILY_PROBLEM_GOAL = 100;
 export const DAILY_GOAL_PRESETS = [10, 15, 25, 40] as const;
 
 export function clampDailyProblemGoal(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
     return DAILY_PROBLEM_GOAL;
   }
   const rounded = Math.round(value);
@@ -41,6 +41,13 @@ export interface DailyGoalProgress {
   headlineNote: string;
 }
 
+/** Real solved-problem count for a Foundry / Odds match (legacy records: 1 per win). */
+function matchSolvedProblems(m: MatchRecord): number {
+  const n = m.solvedProblems;
+  if (typeof n === 'number' && Number.isFinite(n)) return Math.max(0, Math.floor(n));
+  return m.result === 'win' ? 1 : 0;
+}
+
 /**
  * Returns a per-source breakdown of problems/rounds completed on a given local date key
  * across Core Arithmetic, Daily Challenges, Factor Grid, Equation Foundry, and Odds & Urns.
@@ -61,28 +68,27 @@ export function getTodayProblemBreakdown(
     const playedDateKey = getLocalDateKey(new Date(m.playedAt));
     if (playedDateKey !== dateKey) continue;
 
-    const mult =
-      m.dailyMilestoneMultiplier && m.dailyMilestoneMultiplier > 1
-        ? m.dailyMilestoneMultiplier
-        : 1;
-
+    // The milestone multiplier boosts points, never the count of real problems solved.
     if (m.arithmeticMeta) {
-      const baseCredit = Math.max(0, m.arithmeticMeta.solved);
-      arithmeticProblems += Math.round(baseCredit * mult);
+      const solved = m.arithmeticMeta.solved;
+      arithmeticProblems += Number.isFinite(solved) ? Math.max(0, solved) : 0;
     } else if (
       m.gameTitle === 'Equation Foundry' ||
       m.gameTitle === 'Odds & Urns'
     ) {
-      arenaProblems += Math.round(5 * mult);
+      // Only real solves count: a lost match with no solves earns nothing.
+      arenaProblems += matchSolvedProblems(m);
     } else {
-      arenaProblems += Math.round(3 * mult);
+      arenaProblems += 3;
     }
   }
 
+  const creditedDays = new Set<string>();
   for (const dc of dailyCompletions) {
-    if (dc.dateKey === dateKey && dc.solved) {
-      dailyChallengeProblems += 3; // 3-clue chained daily puzzle
-    }
+    if ((!includeSampleMatches && dc.isSample === true) || dc.dateKey !== dateKey || !dc.solved) continue;
+    if (creditedDays.has(dc.dateKey)) continue; // duplicate same-day entries count once
+    creditedDays.add(dc.dateKey);
+    dailyChallengeProblems += 3; // 3-clue chained daily puzzle
   }
 
   return {
@@ -146,8 +152,8 @@ export function computeDailyGoalProgress(params: {
     todayDateKey
   );
 
-  // Determine the next streak badge milestone (3-day Three-Day Scholar -> 7-day -> 14-day)
-  let nextStreakBadgeTitle = 'Three-Day Scholar Seal';
+  // Names must match seals in ACHIEVEMENT_CATALOG (daily-streak-3 / -7 / -14).
+  let nextStreakBadgeTitle = 'Three-Day Scholar';
   let nextStreakTargetDays = 3;
   if (streakStats.currentStreak >= 7) {
     nextStreakBadgeTitle = '14-Day Master Flame';
